@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/stats"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/stats"
 )
 
 func TestPrepareNormalizesServerTransportAlias(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/media"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/media"
 )
 
 // RunRTPSender starts a standalone synthetic RTP sender that bypasses the SIP

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qxip/gossipper/hepcodec"
+	"github.com/sipcapture/gossipper/hepcodec"
 )
 
 // streamPruneAge is how long a stream can be idle before being pruned.

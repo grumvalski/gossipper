@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qxip/gossipper/internal/sip"
+	"github.com/sipcapture/gossipper/internal/sip"
 )
 
 type ReconnectOptions struct {

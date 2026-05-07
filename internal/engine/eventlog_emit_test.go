@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qxip/gossipper/internal/eventlog"
-	"github.com/qxip/gossipper/internal/scenario"
-	"github.com/qxip/gossipper/internal/sip"
+	"github.com/sipcapture/gossipper/internal/eventlog"
+	"github.com/sipcapture/gossipper/internal/scenario"
+	"github.com/sipcapture/gossipper/internal/sip"
 )
 
 // TestEngineEmitsStructuredEventsForUACDialog verifies that, for a basic

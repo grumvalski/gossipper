@@ -7,8 +7,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/qxip/gossipper/internal/sip"
-	"github.com/qxip/gossipper/internal/transport"
+	"github.com/sipcapture/gossipper/internal/sip"
+	"github.com/sipcapture/gossipper/internal/transport"
 )
 
 func (e *Engine) runClientSharedTLS(ctx context.Context) error {

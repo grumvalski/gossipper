@@ -277,9 +277,9 @@ After optimizing `varStore.Snapshot` (scratch buffer) profile was re-taken:
 
 10ms  runtime.newobject
       → runtime.makemap
-      → github.com/qxip/gossipper/internal/engine.(*varStore).Snapshot
-      → github.com/qxip/gossipper/internal/engine.(*Engine).executeCall
-      → github.com/qxip/gossipper/internal/engine.(*Engine).runClientShared.func1
+      → github.com/sipcapture/gossipper/internal/engine.(*varStore).Snapshot
+      → github.com/sipcapture/gossipper/internal/engine.(*Engine).executeCall
+      → github.com/sipcapture/gossipper/internal/engine.(*Engine).runClientShared.func1
 ```
 
 ### CPU conclusions

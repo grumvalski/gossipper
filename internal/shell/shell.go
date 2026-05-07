@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/launcher"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/launcher"
 )
 
 // Run starts an interactive line-oriented shell on in/out/errOut.

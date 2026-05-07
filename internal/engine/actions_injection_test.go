@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qxip/gossipper/internal/scenario"
-	templ "github.com/qxip/gossipper/internal/template"
+	"github.com/sipcapture/gossipper/internal/scenario"
+	templ "github.com/sipcapture/gossipper/internal/template"
 )
 
 func TestParseCSVMutationSpec(t *testing.T) {

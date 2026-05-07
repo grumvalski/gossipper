@@ -12,8 +12,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/eventlog"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/eventlog"
 )
 
 // newOTLPSink builds an eventlog.Sink that exports records to an OTLP

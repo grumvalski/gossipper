@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/eventlog"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/eventlog"
 )
 
 // TestBuildOTLPSinkSendsHTTPRequest spins up an httptest server that

@@ -28,13 +28,13 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcapgo"
 	"github.com/pion/rtcp"
-	"github.com/qxip/gossipper/internal/hep"
-	"github.com/qxip/gossipper/internal/media"
+	"github.com/sipcapture/gossipper/internal/hep"
+	"github.com/sipcapture/gossipper/internal/media"
 
-	"github.com/qxip/gossipper/internal/scenario"
-	"github.com/qxip/gossipper/internal/sip"
-	"github.com/qxip/gossipper/internal/stats"
-	templ "github.com/qxip/gossipper/internal/template"
+	"github.com/sipcapture/gossipper/internal/scenario"
+	"github.com/sipcapture/gossipper/internal/sip"
+	"github.com/sipcapture/gossipper/internal/stats"
+	templ "github.com/sipcapture/gossipper/internal/template"
 )
 
 const (

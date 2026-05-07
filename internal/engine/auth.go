@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qxip/gossipper/internal/eventlog"
-	"github.com/qxip/gossipper/internal/sip"
-	templ "github.com/qxip/gossipper/internal/template"
+	"github.com/sipcapture/gossipper/internal/eventlog"
+	"github.com/sipcapture/gossipper/internal/sip"
+	templ "github.com/sipcapture/gossipper/internal/template"
 )
 
 const authPlaceholder = "Authorization: pending"

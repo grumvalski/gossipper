@@ -13,12 +13,12 @@ import (
 	"runtime/pprof"
 	"syscall"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/launcher"
-	"github.com/qxip/gossipper/internal/pcap2scenario"
-	"github.com/qxip/gossipper/internal/shell"
-	templ "github.com/qxip/gossipper/internal/template"
-	"github.com/qxip/gossipper/internal/tui"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/launcher"
+	"github.com/sipcapture/gossipper/internal/pcap2scenario"
+	"github.com/sipcapture/gossipper/internal/shell"
+	templ "github.com/sipcapture/gossipper/internal/template"
+	"github.com/sipcapture/gossipper/internal/tui"
 )
 
 func main() {

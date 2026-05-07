@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxip/gossipper/internal/sip"
+	"github.com/sipcapture/gossipper/internal/sip"
 )
 
 // RawSIPPacket is a parsed SIP message with its network context from the capture.

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qxip/gossipper/mediasink"
+	"github.com/sipcapture/gossipper/mediasink"
 )
 
 func TestParseCommandPeers(t *testing.T) {

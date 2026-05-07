@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/engine"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/engine"
 )
 
 // RunSIPScenario runs the SIP scenario engine (UAC/UAS or XML) until ctx is cancelled or the scenario completes.

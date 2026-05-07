@@ -10,7 +10,7 @@ description: |
   scenario runner with incremental XML parity, 3PCC helpers, and RTP tooling.
   (AGPL-3.0)
 vendor: "QXIP"
-homepage: "https://github.com/qxip/gossipper"
+homepage: "https://github.com/sipcapture/gossipper"
 # license omitted: nfpm writes "License:" into deb control; Packagecloud may 500.
 
 contents:

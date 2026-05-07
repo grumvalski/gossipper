@@ -47,7 +47,7 @@ func NewOTLPSink(ctx context.Context, build OTLPProvider, resourceAttrs map[stri
 	)
 	return &otlpSink{
 		provider: provider,
-		logger:   provider.Logger("github.com/qxip/gossipper"),
+		logger:   provider.Logger("github.com/sipcapture/gossipper"),
 	}, nil
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/google/gopacket/pcapgo"
 	"github.com/google/gopacket/tcpassembly"
 	"github.com/google/gopacket/tcpassembly/tcpreader"
-	"github.com/qxip/gossipper/internal/sip"
+	"github.com/sipcapture/gossipper/internal/sip"
 )
 
 // ExtractResult holds all data extracted from a PCAP file.

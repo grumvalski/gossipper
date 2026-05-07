@@ -11,11 +11,11 @@ import (
 	"unsafe"
 	"time"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/engine"
-	"github.com/qxip/gossipper/internal/launcher"
-	"github.com/qxip/gossipper/internal/scenario"
-	"github.com/qxip/gossipper/internal/stats"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/engine"
+	"github.com/sipcapture/gossipper/internal/launcher"
+	"github.com/sipcapture/gossipper/internal/scenario"
+	"github.com/sipcapture/gossipper/internal/stats"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )

@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/qxip/gossipper/hepcodec"
-	"github.com/qxip/gossipper/mediasink"
+	"github.com/sipcapture/gossipper/hepcodec"
+	"github.com/sipcapture/gossipper/mediasink"
 )
 
 // Protocol type constants on the HEP wire (proto_type chunk).

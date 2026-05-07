@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/eventlog"
-	"github.com/qxip/gossipper/internal/scenario"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/eventlog"
+	"github.com/sipcapture/gossipper/internal/scenario"
 )
 
 // BuildEventLogger constructs an eventlog.Logger from cli flags.

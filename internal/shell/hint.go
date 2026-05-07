@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/qxip/gossipper/internal/cli"
-	"github.com/qxip/gossipper/internal/launcher"
-	"github.com/qxip/gossipper/internal/scenario"
+	"github.com/sipcapture/gossipper/internal/cli"
+	"github.com/sipcapture/gossipper/internal/launcher"
+	"github.com/sipcapture/gossipper/internal/scenario"
 )
 
 // WriteHints analyzes the current session and prints what to set or fix.

@@ -1,4 +1,4 @@
-module github.com/qxip/gossipper
+module github.com/sipcapture/gossipper
 
 go 1.26.1
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxip/gossipper/mediasink"
+	"github.com/sipcapture/gossipper/mediasink"
 )
 
 const (
@@ -638,7 +638,7 @@ func extractInfIndexArgs(args []string) ([]string, string, int, error) {
 }
 
 func writeHelpPreamble(w io.Writer) {
-	fmt.Fprintln(w, "Gossipper — SIP load generator (https://github.com/QXIP/gossipper)")
+	fmt.Fprintln(w, "Gossipper — SIP load generator (https://github.com/sipcapture/gossipper)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Subcommands (run before any flags):")
 	fmt.Fprintln(w, "  gossipper shell              interactive line shell: set flags, wizard, hint, run")

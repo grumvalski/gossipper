@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qxip/gossipper/internal/scenario"
+	"github.com/sipcapture/gossipper/internal/scenario"
 )
 
 func TestStartRateRampLoopIncreasesRateUpToMax(t *testing.T) {
