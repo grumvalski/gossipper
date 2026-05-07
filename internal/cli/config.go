@@ -191,7 +191,7 @@ func Parse(args []string) (Config, error) {
 	fs.StringVar(&cfg.ScenarioFile, "sf", cfg.ScenarioFile, "path to XML scenario file")
 	fs.StringVar(&cfg.ScenarioName, "sn", cfg.ScenarioName, "built-in scenario name (uac, uas)")
 	fs.StringVar(&cfg.Service, "s", cfg.Service, "service name used in templates")
-	fs.StringVar(&cfg.Transport, "t", cfg.Transport, "transport mode: u1, un, ui, t1, tn, l1, ln, s1 or sn")
+	fs.StringVar(&cfg.Transport, "t", cfg.Transport, "transport: u1/un/ui, t1/tn, l1/ln; server aliases s1/sn (UDP only), sl (TLS, same as l1 after normalize)")
 	fs.StringVar(&cfg.LocalIP, "i", cfg.LocalIP, "local IP address")
 	fs.IntVar(&cfg.LocalPort, "p", cfg.LocalPort, "local port")
 	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV injection file for ui transport source IP selection")
@@ -389,7 +389,7 @@ func Parse(args []string) (Config, error) {
 	cfg.InjectionFile = strings.TrimSpace(cfg.InjectionFile)
 
 	switch cfg.Transport {
-	case "u1", "un", "ui", "t1", "tn", "l1", "ln", "s1", "sn":
+	case "u1", "un", "ui", "t1", "tn", "l1", "ln", "s1", "sn", "sl":
 	default:
 		return Config{}, fmt.Errorf("unsupported transport %q", cfg.Transport)
 	}
@@ -486,7 +486,7 @@ func Parse(args []string) (Config, error) {
 	}
 	if cfg.MaxReconnect > 0 || cfg.ReconnectSleep > 0 || cfg.ReconnectClose {
 		switch cfg.Transport {
-		case "t1", "l1":
+		case "t1", "l1", "sl":
 		default:
 			return Config{}, errors.New("max_reconnect/reconnect_sleep/reconnect_close are only supported with t1 or l1 transport")
 		}

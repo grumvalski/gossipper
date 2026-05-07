@@ -76,7 +76,7 @@ func Run() error {
 	traceMsgField := tview.NewCheckbox().SetLabel("trace_msg ")
 	traceErrField := tview.NewCheckbox().SetLabel("trace_err ")
 
-	transports := []string{"u1", "un", "ui", "t1", "tn", "l1", "ln", "s1", "sn"}
+	transports := []string{"u1", "un", "ui", "t1", "tn", "l1", "ln", "s1", "sn", "sl"}
 	modeField.SetOptions([]string{"client", "server"}, func(text string, _ int) {
 		filteredProfiles = filterProfiles(profiles, text)
 		profileField.SetOptions(profileLabels(filteredProfiles), nil)
@@ -519,6 +519,9 @@ func buildArgs(
 		case "un":
 			transport = "sn"
 		}
+	}
+	if mode == "server" && transport == "l1" {
+		transport = "sl"
 	}
 
 	args = append(args,

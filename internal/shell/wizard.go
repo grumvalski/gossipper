@@ -149,7 +149,7 @@ func RunWizard(in *bufio.Reader, out, errOut io.Writer, s *Session) error {
 			}
 		}
 
-		t, err := readLine(in, out, "Server transport (transport / -t): s1 or sn (UDP server)", "s1")
+		t, err := readLine(in, out, "Server transport (-t): s1/sn (UDP), sl/l1/ln (TLS; cert+key for TLS)", "s1")
 		if err != nil {
 			return err
 		}

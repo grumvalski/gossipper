@@ -14,7 +14,7 @@ testing.
   `assignstr`, `todouble`, `add`, `subtract`, `multiply`, `divide`, `strcmp`,
   `test`, `log`, `warning`, `lookup`, `jump`, `gettimeofday`, `urlencode`,
   `urldecode`, `verifyauth`, and `exec`
-- Handles UDP, TCP, TLS, and server-side UDP aliases `s1` / `sn`
+- Handles UDP, TCP, TLS, server-side UDP aliases `s1` / `sn`, and server TLS alias `sl` (→ `l1`)
 - Supports 3PCC-style `sendCmd` / `recvCmd` flows, including external peer
   communication between multiple `Gossipper` instances
 - Handles out-of-call SIP exchanges such as stateless `OPTIONS`

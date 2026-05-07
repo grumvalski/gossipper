@@ -41,6 +41,36 @@ func TestPrepareRejectsServerAliasForClientScenario(t *testing.T) {
 	}
 }
 
+func TestPrepareNormalizesTLSServerTransportAlias(t *testing.T) {
+	t.Parallel()
+
+	cfg := cli.DefaultConfig()
+	cfg.ScenarioName = "uas"
+	cfg.Transport = "sl"
+
+	prepared, err := Prepare(cfg)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.CLIConfig.Transport != "l1" || prepared.EngineConfig.Transport != "l1" {
+		t.Fatalf("expected transport normalized to l1, cli=%q engine=%q",
+			prepared.CLIConfig.Transport, prepared.EngineConfig.Transport)
+	}
+}
+
+func TestPrepareRejectsTLSServerAliasForClientScenario(t *testing.T) {
+	t.Parallel()
+
+	cfg := cli.DefaultConfig()
+	cfg.ScenarioName = "uac"
+	cfg.Transport = "sl"
+
+	_, err := Prepare(cfg)
+	if err == nil || !strings.Contains(err.Error(), "transport sl requires a server scenario") {
+		t.Fatalf("expected transport validation error, got %v", err)
+	}
+}
+
 func TestPrepareAcceptsUITransportForServerScenario(t *testing.T) {
 	t.Parallel()
 

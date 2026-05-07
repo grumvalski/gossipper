@@ -128,6 +128,7 @@ into no-ops or empty strings.
 | `ui` | partial (pragmatic client+server multi-IP parity) |
 | `s1` | supported as server-side UDP alias |
 | `sn` | supported as server-side UDP alias |
+| `sl` | supported as server-side TLS alias (normalizes to `l1`; requires TLS cert/key) |
 | `t1` | supported |
 | `tn` | supported |
 | `l1` | supported |

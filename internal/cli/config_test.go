@@ -87,12 +87,12 @@ func TestParseAcceptsServerTransportAliases(t *testing.T) {
 
 	cfg, err = Parse([]string{
 		"-sn", "uas",
-		"-t", "sn",
+		"-t", "sl",
 	})
 	if err != nil {
-		t.Fatalf("Parse(sn) error = %v", err)
+		t.Fatalf("Parse(sl) error = %v", err)
 	}
-	if cfg.Transport != "sn" {
+	if cfg.Transport != "sl" {
 		t.Fatalf("unexpected transport %q", cfg.Transport)
 	}
 }

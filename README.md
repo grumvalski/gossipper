@@ -18,9 +18,10 @@ The current MVP implements:
 - Basic SIPp-style keywords such as `[call_id]`, `[cseq]`, `[branch]`,
   `[remote_ip]`, `[local_ip]`, `[server_ip]`, `[len]`, `[last_*]`, `[last_Request_URI]`, `[users]`, `[userid]`, `[$var]`, `[file ...]`, `[fieldN ...]`, and Digest `[authentication]`
 - UDP transports `u1`, `un`, and `ui` (pragmatic client+server multi-IP mode)
-- Server-side UDP aliases `s1` and `sn` for UAS-style scenarios
+- Server-side UDP aliases `s1` and `sn` for UAS-style scenarios (they map to `u1` / `un`; they do **not** enable TLS)
+- Server-side TLS alias `sl` for UAS (maps to `l1`; requires `-tls_cert` and `-tls_key`)
 - TCP transports `t1` and `tn`
-- TLS transports `l1` and `ln`
+- TLS transports `l1` and `ln` (UAC or UAS; same codes as for TCP, plus TLS files as needed)
 - Global and per-user variable scopes
 - SIPp-style auth credentials via `-au` / `-ap` for challenged `401` / `407` request retries, inline `[authentication username=... password=...]`, and server-side `verifyauth`
 - Concurrent call generation with rate limiting
@@ -254,6 +255,15 @@ Run over TLS:
 
 ```bash
 go run ./cmd/gossip -t l1 -sf ./testdata/scenarios/basic_uac.xml -rsa 127.0.0.1:5061 -tls_skip_verify
+```
+
+**SIP TLS (answers to common support questions):** signaling over TLS **is supported**. Use `-t l1` or `-t ln` (not plain TCP). For a **UAS**, `-t s1` / `-t sn` are **UDP-only** aliases; use `-t l1` / `-t ln` or the SIPp-style TLS server shortcut `-t sl` (same as `l1`). A TLS listener needs `-tls_cert` and `-tls_key`; clients often use `-tls_ca` and `-tls_skip_verify=false` when validating the peer. The default `-tls_skip_verify=true` is convenient for lab setups only.
+
+Run the built-in **UAS over TLS** (replace certificate paths with real files):
+
+```bash
+go run ./cmd/gossip -sn uas -t sl -i 0.0.0.0 -p 5061 \
+  -tls_cert ./server.crt -tls_key ./server.key -m 1
 ```
 
 Run the built-in UAS in SIPp-style server transport mode:

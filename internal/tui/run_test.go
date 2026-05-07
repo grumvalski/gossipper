@@ -140,6 +140,44 @@ func TestBuildArgsServerKeepsUITransport(t *testing.T) {
 	}
 }
 
+func TestBuildArgsServerMapsL1ToSLAlias(t *testing.T) {
+	t.Parallel()
+
+	args, err := buildArgs(
+		profile{Name: "builtin-uas", ScenarioName: "uas"},
+		"server",
+		"l1",
+		"",
+		"127.0.0.1",
+		"5061",
+		"service",
+		"1",
+		"1",
+		"1",
+		"1",
+		"1",
+		"",
+		"",
+		"",
+		"",
+		false,
+		true,
+		"",
+		"0",
+		false,
+		false,
+		false,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("buildArgs() error = %v", err)
+	}
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "-t sl") {
+		t.Fatalf("expected server l1 to emit -t sl, got: %v", args)
+	}
+}
+
 func TestBuildArgsIncludesHEPMediaFlags(t *testing.T) {
 	t.Parallel()
 
