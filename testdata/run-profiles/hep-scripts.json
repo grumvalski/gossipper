@@ -1,0 +1,46 @@
+{
+  "aliases": {
+    "hep-uas-listen": {
+      "scenario_file": "../scenarios/uas_pcap.xml",
+      "transport": "u1",
+      "local_ip": "0.0.0.0",
+      "local_port": 9050,
+      "total_calls": 0,
+      "rate": 1,
+      "max_concurrent": 2048,
+      "hep_capture_id": 2001
+    },
+    "hep-uac-send": {
+      "scenario_file": "../scenarios/uac_rtp_raw.xml",
+      "remote_addr": "127.0.0.1:9050",
+      "total_calls": 0,
+      "rate": 2,
+      "max_concurrent": 32,
+      "hep_capture_id": 3001,
+      "send_media_report": true,
+      "hep_homer_lake_rtcp": true
+    },
+    "hep-uac-send-raw-rtcp": {
+      "scenario_file": "../scenarios/uac_rtp_raw.xml",
+      "remote_addr": "127.0.0.1:9050",
+      "total_calls": 0,
+      "rate": 2,
+      "max_concurrent": 32,
+      "hep_capture_id": 3001,
+      "send_media_report": true,
+      "hep_homer_lake_rtcp": false,
+      "hep_raw_rtcp": true
+    },
+    "hep-uac-send-short-json": {
+      "scenario_file": "../scenarios/uac_rtp_raw.xml",
+      "remote_addr": "127.0.0.1:9050",
+      "total_calls": 0,
+      "rate": 2,
+      "max_concurrent": 32,
+      "hep_capture_id": 3001,
+      "send_media_report": true,
+      "hep_homer_lake_rtcp": false,
+      "hep_raw_rtcp": false
+    }
+  }
+}
