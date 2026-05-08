@@ -12,11 +12,7 @@ import (
 )
 
 func (e *Engine) runClientSharedTLS(ctx context.Context) error {
-	bindIP := e.cfg.LocalIP
-	if len(e.cfg.UISourceIPs) > 0 {
-		bindIP = e.cfg.UISourceIPs[0]
-	}
-	localAddr := fmt.Sprintf("%s:%d", bindIP, e.cfg.LocalPort)
+	localAddr := fmt.Sprintf("%s:%d", e.cfg.LocalIP, e.cfg.LocalPort)
 	remoteAddr := fmt.Sprintf("%s:%d", e.cfg.RemoteHost, e.cfg.RemotePort)
 	tlsCfg, err := e.clientTLSConfig()
 	if err != nil {
@@ -46,9 +42,7 @@ func (e *Engine) runClientSharedTLS(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker:
 		}
-		if err := acquireCallSemaphore(ctx, sem); err != nil {
-			return err
-		}
+		sem <- struct{}{}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -57,10 +51,20 @@ func (e *Engine) runClientSharedTLS(ctx context.Context) error {
 			inbox := registry.register(callID)
 			defer registry.unregister(callID)
 			receive := func(waitCtx context.Context) (*sip.Message, error) {
-				return recvPooledFromMailboxTryBuffer(waitCtx, inbox)
+				select {
+				case msg := <-inbox:
+					return msg, nil
+				default:
+				}
+				select {
+				case msg := <-inbox:
+					return msg, nil
+				case <-waitCtx.Done():
+					return nil, waitCtx.Err()
+				}
 			}
 			send := func(payload []byte) error { return shared.Send(payload) }
-			localIP := resolveLocalIP(shared.LocalPort(), bindIP)
+			localIP := resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort)
 			send = e.wrapSIPSend(callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send, receive, nil)
@@ -90,25 +94,19 @@ func (e *Engine) runClientPerCallTLS(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker:
 		}
-		if err := acquireCallSemaphore(ctx, sem); err != nil {
-			return err
-		}
+		sem <- struct{}{}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			bindIP := e.cfg.LocalIP
-			if len(e.cfg.UISourceIPs) > 0 {
-				bindIP = e.sourceIPForCall(callNumber)
-			}
-			dialog, err := transport.NewDialogTLS(ctx, fmt.Sprintf("%s:%d", bindIP, e.cfg.LocalPort), remoteAddr, tlsCfg)
+			dialog, err := transport.NewDialogTLS(ctx, fmt.Sprintf("%s:%d", e.cfg.LocalIP, e.cfg.LocalPort), remoteAddr, tlsCfg)
 			if err != nil {
 				once.Do(func() { runErr = err })
 				return
 			}
 			defer dialog.Close()
 			callID := newCallID(callNumber)
-			localIP := resolveLocalIP(dialog.LocalPort(), bindIP)
+			localIP := resolveLocalIP(dialog.LocalPort(), e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort)
 			send := func(payload []byte) error { return dialog.Send(payload) }
 			receive := adaptReceiveToPtr(func(waitCtx context.Context) (sip.Message, error) { return dialog.Receive(waitCtx) })
 			send = e.wrapSIPSend(callNumber, callID, localIP, dialog.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send)
@@ -184,7 +182,12 @@ func (e *Engine) runServerTLSShared(ctx context.Context) error {
 						mu.Unlock()
 					}()
 					receive := adaptReceiveToPtr(func(waitCtx context.Context) (sip.Message, error) {
-						return recvSIPValueFromMailboxWaitFirst(waitCtx, inbox)
+						select {
+						case <-waitCtx.Done():
+							return sip.Message{}, waitCtx.Err()
+						case msg := <-inbox:
+							return msg, nil
+						}
 					})
 					send := func(payload []byte) error {
 						writeMu.Lock()
@@ -192,7 +195,7 @@ func (e *Engine) runServerTLSShared(ctx context.Context) error {
 						return reader.Write(payload)
 					}
 					remote := conn.RemoteAddr().(*net.TCPAddr)
-					localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP)
+					localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP, remote.IP.String(), remote.Port)
 					send = e.wrapSIPSend(callNumber, id, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, send)
 					receive = e.wrapSIPReceive(callNumber, id, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, receive)
 					_ = e.executeCall(ctx, callNumber, id, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, send, receive, nil)
@@ -249,10 +252,7 @@ func (e *Engine) runServerTLSPerConn(ctx context.Context) error {
 				select {
 				case <-waitCtx.Done():
 					return sip.Message{}, waitCtx.Err()
-				case msg, ok := <-inbox:
-					if !ok {
-						return sip.Message{}, errSIPMailboxClosed
-					}
+				case msg := <-inbox:
 					return msg, nil
 				default:
 					return reader.Read(waitCtx)
@@ -260,7 +260,7 @@ func (e *Engine) runServerTLSPerConn(ctx context.Context) error {
 			})
 			send := func(payload []byte) error { return reader.Write(payload) }
 			remote := conn.RemoteAddr().(*net.TCPAddr)
-			localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP, remote.IP.String(), remote.Port)
 			send = e.wrapSIPSend(callNumber, callID, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, receive)
 			_ = e.executeCall(ctx, callNumber, callID, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, send, receive, nil)

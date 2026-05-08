@@ -302,14 +302,14 @@ func (e *Engine) runClientCommandOnly(ctx context.Context) error {
 			receive := adaptReceiveToPtr(func(waitCtx context.Context) (sip.Message, error) {
 				return sip.Message{}, fmt.Errorf("SIP receive is not available in command-only scenario")
 			})
-			send = e.wrapSIPSend(callNumber, callID, resolveLocalIP(0, e.cfg.LocalIP), e.cfg.LocalPort, e.cfg.RemoteHost, e.cfg.RemotePort, send)
-			receive = e.wrapSIPReceive(callNumber, callID, resolveLocalIP(0, e.cfg.LocalIP), e.cfg.LocalPort, e.cfg.RemoteHost, e.cfg.RemotePort, receive)
+			send = e.wrapSIPSend(callNumber, callID, resolveLocalIP(0, e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort), e.cfg.LocalPort, e.cfg.RemoteHost, e.cfg.RemotePort, send)
+			receive = e.wrapSIPReceive(callNumber, callID, resolveLocalIP(0, e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort), e.cfg.LocalPort, e.cfg.RemoteHost, e.cfg.RemotePort, receive)
 
 			runErrLocal := e.executeCall(
 				ctx,
 				callNumber,
 				callID,
-				resolveLocalIP(0, e.cfg.LocalIP),
+				resolveLocalIP(0, e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort),
 				e.cfg.LocalPort,
 				e.cfg.RemoteHost,
 				e.cfg.RemotePort,
@@ -384,7 +384,7 @@ func (e *Engine) runClientShared(ctx context.Context) error {
 				return resolved.IP.String(), nil
 			}
 
-			localIP := resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP, remoteAddr.IP.String(), remoteAddr.Port)
 			send = e.wrapSIPSend(callNumber, callID, localIP, shared.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, shared.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, shared.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, send, receive, setDestination)
@@ -452,7 +452,7 @@ func (e *Engine) runClientPerCall(ctx context.Context) error {
 				return dialog.Send(payload)
 			}
 
-			localIP := resolveLocalIP(dialog.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(dialog.LocalPort(), e.cfg.LocalIP, remoteAddr.IP.String(), remoteAddr.Port)
 			send = e.wrapSIPSend(callNumber, callID, localIP, dialog.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, dialog.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, dialog.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, send, receive, nil)
@@ -540,7 +540,7 @@ func (e *Engine) runClientPerSourceIP(ctx context.Context) error {
 				return resolved.IP.String(), nil
 			}
 
-			localIP := resolveLocalIP(shared.LocalPort(), sourceIP)
+			localIP := resolveLocalIP(shared.LocalPort(), sourceIP, remoteAddr.IP.String(), remoteAddr.Port)
 			send = e.wrapSIPSend(callNumber, callID, localIP, shared.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, shared.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, shared.LocalPort(), remoteAddr.IP.String(), remoteAddr.Port, send, receive, setDestination)
@@ -601,7 +601,7 @@ func (e *Engine) runClientSharedTCP(ctx context.Context) error {
 			send := func(payload []byte) error {
 				return shared.Send(payload)
 			}
-			localIP := resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort)
 			send = e.wrapSIPSend(callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send, receive, nil)
@@ -657,7 +657,7 @@ func (e *Engine) runClientPerCallTCP(ctx context.Context) error {
 				return dialog.Send(payload)
 			}
 
-			localIP := resolveLocalIP(dialog.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(dialog.LocalPort(), e.cfg.LocalIP, e.cfg.RemoteHost, e.cfg.RemotePort)
 			send = e.wrapSIPSend(callNumber, callID, localIP, dialog.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, dialog.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, dialog.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send, receive, nil)
@@ -890,7 +890,7 @@ func (e *Engine) runServerUDP(ctx context.Context) error {
 					inbox:     make(chan *sip.Message, sipMailboxCap),
 					remote:    remote,
 					shared:    shared,
-					localIP:   resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP),
+					localIP:   resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP, remote.IP.String(), remote.Port),
 					localPort: shared.LocalPort(),
 				}
 				sessions[callID] = sess
@@ -1189,7 +1189,7 @@ func (e *Engine) runServerTCPShared(ctx context.Context) error {
 						return reader.Write(payload)
 					}
 					remote := conn.RemoteAddr().(*net.TCPAddr)
-					localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP)
+					localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP, remote.IP.String(), remote.Port)
 					send = e.wrapSIPSend(callNumber, id, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, send)
 					recv := adaptReceiveToPtr(receive)
 					recv = e.wrapSIPReceive(callNumber, id, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, recv)
@@ -1263,7 +1263,7 @@ func (e *Engine) runServerTCPPerConn(ctx context.Context) error {
 			}
 			send := func(payload []byte) error { return reader.Write(payload) }
 			remote := conn.RemoteAddr().(*net.TCPAddr)
-			localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(reader.LocalPort(), e.cfg.LocalIP, remote.IP.String(), remote.Port)
 			send = e.wrapSIPSend(callNumber, callID, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, send)
 			recv := adaptReceiveToPtr(receive)
 			recv = e.wrapSIPReceive(callNumber, callID, localIP, reader.LocalPort(), remote.IP.String(), remote.Port, recv)
@@ -1941,13 +1941,56 @@ func ipType(ip string) string {
 	return "4"
 }
 
-func resolveLocalIP(port int, configured string) string {
-	if configured != "" && configured != "0.0.0.0" && configured != "::" {
+// isWildcardLocalIP reports addresses that are valid for bind but must not
+// appear verbatim in SIP Via/Contact (aligned with SIPp treating INADDR_ANY).
+func isWildcardLocalIP(configured string) bool {
+	s := strings.TrimSpace(configured)
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
+	if s == "" || s == "0.0.0.0" || s == "::" {
+		return true
+	}
+	if ip := net.ParseIP(s); ip != nil && ip.IsUnspecified() {
+		return true
+	}
+	return false
+}
+
+// localIPToward returns the local IP the kernel would use to reach remoteHost:remotePort,
+// using a connected UDP socket (same idea as SIPp src/socket.cpp).
+func localIPToward(remoteHost string, remotePort int) (string, error) {
+	if strings.TrimSpace(remoteHost) == "" || remotePort <= 0 {
+		return "", errors.New("local IP discovery requires remote host:port")
+	}
+	addr := net.JoinHostPort(remoteHost, strconv.Itoa(remotePort))
+	raddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return "", err
+	}
+	conn, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	udpAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok || udpAddr == nil || udpAddr.IP == nil {
+		return "", errors.New("unexpected UDP local address")
+	}
+	ip := udpAddr.IP
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4.String(), nil
+	}
+	return ip.String(), nil
+}
+
+func resolveLocalIP(port int, configured string, towardHost string, towardPort int) string {
+	if !isWildcardLocalIP(configured) {
 		return configured
 	}
-	if port == 0 {
-		return "127.0.0.1"
+	if ip, err := localIPToward(towardHost, towardPort); err == nil && ip != "" {
+		return ip
 	}
+	_ = port
 	return "127.0.0.1"
 }
 
