@@ -453,18 +453,30 @@ func xmlDecodeScenario(data []byte, v any) error {
 
 func scenarioXMLToUTF8(data []byte) ([]byte, error) {
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
-	enc := strings.ToLower(strings.TrimSpace(sniffXMLDeclEncoding(data)))
-	switch enc {
+	enc := strings.TrimSpace(sniffXMLDeclEncoding(data))
+	switch strings.ToLower(enc) {
 	case "", "utf-8", "utf8":
 		return data, nil
-	case "iso-8859-1", "iso8859-1", "latin-1", "latin1", "ibm819", "cp819", "csisolatin1":
+	default:
+		if !isISO88591DeclEncoding(enc) {
+			return nil, fmt.Errorf("scenario XML encoding %q is not supported (supported: utf-8, iso-8859-1)", enc)
+		}
 		out, err := charmap.ISO8859_1.NewDecoder().Bytes(data)
 		if err != nil {
 			return nil, err
 		}
 		return rewriteXMLDeclEncodingToUTF8(out), nil
+	}
+}
+
+// isISO88591DeclEncoding reports whether an XML declaration encoding value
+// denotes ISO-8859-1 / Latin-1 (including IANA and legacy aliases).
+func isISO88591DeclEncoding(enc string) bool {
+	switch strings.ToLower(strings.TrimSpace(enc)) {
+	case "iso-8859-1", "iso8859-1", "latin-1", "latin1", "ibm819", "cp819", "csisolatin1":
+		return true
 	default:
-		return nil, fmt.Errorf("scenario XML encoding %q is not supported (supported: utf-8, iso-8859-1)", enc)
+		return false
 	}
 }
 
@@ -496,21 +508,42 @@ func sniffXMLDeclEncoding(data []byte) string {
 	return strings.TrimSpace(rest[:j])
 }
 
+// rewriteXMLDeclEncodingToUTF8 sets encoding="UTF-8" (or single-quoted) in the
+// first XML processing instruction when the declared encoding is an ISO-8859-1
+// alias (same set as isISO88591DeclEncoding). This must match scenarioXMLToUTF8
+// after Latin-1 transcoding so the prolog matches the actual UTF-8 bytes.
 func rewriteXMLDeclEncodingToUTF8(b []byte) []byte {
-	replacements := [][2][]byte{
-		{[]byte(`encoding="ISO-8859-1"`), []byte(`encoding="UTF-8"`)},
-		{[]byte(`encoding='ISO-8859-1'`), []byte(`encoding='UTF-8'`)},
-		{[]byte(`encoding="iso-8859-1"`), []byte(`encoding="UTF-8"`)},
-		{[]byte(`encoding='iso-8859-1'`), []byte(`encoding='UTF-8'`)},
-		{[]byte(`encoding="Latin-1"`), []byte(`encoding="UTF-8"`)},
-		{[]byte(`encoding='Latin-1'`), []byte(`encoding='UTF-8'`)},
-		{[]byte(`encoding="latin1"`), []byte(`encoding="UTF-8"`)},
-		{[]byte(`encoding='latin1'`), []byte(`encoding='UTF-8'`)},
+	end := bytes.Index(b, []byte("?>"))
+	if end < 0 {
+		return b
 	}
-	for _, p := range replacements {
-		if bytes.Contains(b, p[0]) {
-			return bytes.Replace(b, p[0], p[1], 1)
-		}
+	pi := b[:end+2]
+	lowerPI := bytes.ToLower(pi)
+	key := []byte("encoding=")
+	i := bytes.Index(lowerPI, key)
+	if i < 0 {
+		return b
 	}
-	return b
+	rest := bytes.TrimSpace(pi[i+len(key):])
+	if len(rest) < 3 {
+		return b
+	}
+	q := rest[0]
+	if q != '"' && q != '\'' {
+		return b
+	}
+	valPart := rest[1:]
+	j := bytes.IndexByte(valPart, q)
+	if j < 0 {
+		return b
+	}
+	if !isISO88591DeclEncoding(string(valPart[:j])) {
+		return b
+	}
+	suffix := valPart[j+1:]
+	prefix := pi[:i+len(key)]
+	mid := append([]byte{q}, []byte("UTF-8")...)
+	mid = append(mid, q)
+	newPI := append(append(prefix, mid...), suffix...)
+	return append(newPI, b[end+2:]...)
 }

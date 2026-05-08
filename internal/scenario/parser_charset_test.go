@@ -9,6 +9,33 @@ import (
 // In Go, string(byte(0xE9)) is UTF-8 for U+00E9 (two bytes), not Latin-1 0xE9.
 // Use "\xe9" in a double-quoted string for a single Latin-1 byte in test XML.
 
+func TestScenarioXMLToUTF8RewritesDeclLatin1Aliases(t *testing.T) {
+	t.Parallel()
+
+	body := "\n" + `<scenario name="caf` + "\xe9" + `">` + "\n" +
+		`  <send><![CDATA[OPTIONS sip:u@h SIP/2.0]]></send>` + "\n" + `</scenario>`
+
+	for _, decl := range []string{
+		`<?xml version="1.0" encoding="ISO-8859-1"?>`,
+		`<?xml version="1.0" encoding="IBM819"?>`,
+		`<?xml version="1.0" encoding='cp819'?>`,
+		`<?xml version="1.0" encoding="csisolatin1"?>`,
+	} {
+		xml := decl + body
+		out, err := scenarioXMLToUTF8([]byte(xml))
+		if err != nil {
+			t.Fatalf("%s: scenarioXMLToUTF8: %v", decl, err)
+		}
+		if !bytes.Contains(out, []byte(`encoding="UTF-8"`)) && !bytes.Contains(out, []byte(`encoding='UTF-8'`)) {
+			p := min(120, len(out))
+			t.Fatalf("%s: expected UTF-8 in prolog, got prefix: %s", decl, string(out[:p]))
+		}
+		if bytes.Contains(out, []byte(decl)) {
+			t.Fatalf("%s: prolog still contains original declaration substring", decl)
+		}
+	}
+}
+
 func TestScenarioXMLToUTF8RewritesDecl(t *testing.T) {
 	t.Parallel()
 
