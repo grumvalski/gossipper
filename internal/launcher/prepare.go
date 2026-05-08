@@ -137,6 +137,16 @@ func NormalizeTransport(cfg *cli.Config, sc scenario.Scenario) error {
 			return fmt.Errorf("transport sl requires a server scenario")
 		}
 		cfg.Transport = "l1"
+	case "cl":
+		if sc.Mode != scenario.ModeClient {
+			return fmt.Errorf("transport cl requires a client scenario")
+		}
+		cfg.Transport = "l1"
+	case "cln":
+		if sc.Mode != scenario.ModeClient {
+			return fmt.Errorf("transport cln requires a client scenario")
+		}
+		cfg.Transport = "ln"
 	case "ui":
 		if len(cfg.UISourceIPs) == 0 || cfg.InjectionFile == "" || cfg.IPField < 0 {
 			return fmt.Errorf("transport ui requires inf and ip_field with at least one source IP")

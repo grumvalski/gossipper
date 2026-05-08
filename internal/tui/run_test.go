@@ -178,6 +178,78 @@ func TestBuildArgsServerMapsL1ToSLAlias(t *testing.T) {
 	}
 }
 
+func TestBuildArgsClientMapsTLSModesToCLAliases(t *testing.T) {
+	t.Parallel()
+
+	args, err := buildArgs(
+		profile{Name: "builtin-uac", ScenarioName: "uac"},
+		"client",
+		"l1",
+		"127.0.0.1:5061",
+		"127.0.0.1",
+		"0",
+		"service",
+		"1",
+		"1",
+		"1",
+		"1",
+		"1",
+		"",
+		"",
+		"",
+		"",
+		false,
+		true,
+		"",
+		"0",
+		false,
+		false,
+		false,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("buildArgs() error = %v", err)
+	}
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "-t cl") {
+		t.Fatalf("expected client l1 to emit -t cl, got: %v", args)
+	}
+
+	args, err = buildArgs(
+		profile{Name: "builtin-uac", ScenarioName: "uac"},
+		"client",
+		"ln",
+		"127.0.0.1:5061",
+		"127.0.0.1",
+		"0",
+		"service",
+		"1",
+		"1",
+		"1",
+		"1",
+		"1",
+		"",
+		"",
+		"",
+		"",
+		false,
+		true,
+		"",
+		"0",
+		false,
+		false,
+		false,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("buildArgs(ln) error = %v", err)
+	}
+	joined = strings.Join(args, " ")
+	if !strings.Contains(joined, "-t cln") {
+		t.Fatalf("expected client ln to emit -t cln, got: %v", args)
+	}
+}
+
 func TestBuildArgsIncludesHEPMediaFlags(t *testing.T) {
 	t.Parallel()
 

@@ -129,10 +129,26 @@ into no-ops or empty strings.
 | `s1` | supported as server-side UDP alias |
 | `sn` | supported as server-side UDP alias |
 | `sl` | supported as server-side TLS alias (normalizes to `l1`; requires TLS cert/key) |
+| `cl` | supported as client-side TLS alias (normalizes to `l1`) |
+| `cln` | supported as client-side TLS alias (normalizes to `ln`) |
 | `t1` | supported |
 | `tn` | supported |
 | `l1` | supported |
 | `ln` | supported |
+
+## TLS socket modes (SIPp-style)
+
+Relates to [issue #7](https://github.com/sipcapture/gossipper/issues/7): how SIPp-style TLS mono/multi socket behavior maps to `Gossipper`.
+
+| SIPp-style behavior | `Gossipper` | Notes |
+| --- | --- | --- |
+| Mono socket: one TLS connection to the remote peer | `-t l1` (UAC alias `-t cl`) | Single shared TLS client (`runClientSharedTLS`); signaling for all calls is demultiplexed by `Call-ID`. |
+| Multi socket: one TLS connection per new call, with a cap | `-t ln` (UAC alias `-t cln`) and optional `-max_socket` | Per-call TLS (`runClientPerCallTLS`); `-max_socket` limits how many per-call sockets may be open at once (same family as `un` / `tn` / `ln`). |
+| Close TLS when each call ends (multi) | Default for `ln` / `cln` UAC | Each call opens a `transport.DialogTLS` and closes it when that call’s scenario completes (`defer dialog.Close()` after `executeCall`). If sockets appear to outlive individual calls, open an issue with version, full CLI, and scenario. |
+
+**TLS material:** UAS needs `-tls_cert` and `-tls_key`; UAC often uses `-tls_ca` and `-tls_skip_verify=false` for strict verification (default skip is for lab use).
+
+**Reconnect:** only **shared** client TCP/TLS (`-t t1` / `-t l1`, or alias `-t cl`) uses `-max_reconnect`, `-reconnect_sleep`, and `-reconnect_close` on connection loss. Per-call `ln` / `cln` does not share that reconnect path.
 
 ## 3PCC CLI workflow
 
@@ -162,8 +178,8 @@ into no-ops or empty strings.
 | `-inf` + `-ip_field` | supported (for `-t ui`) | Selects UI transport bind IPs from a CSV field (zero-based index): client mode preserves CSV row order (including duplicates) for per-call rotation, server mode binds one listener per unique IP; parser also accepts alias `-ipfield` and skips blank/comment (`#`) rows in `-inf` files |
 | `-t ui` | partial | Pragmatic M3 parity: one UDP shared socket per source IP in client mode and one UDP listener socket per configured IP in server mode; bind failures include failing `ip:port`; TUI launch path supports `ui` + `inf` / `ip_field`; transport token is normalized case-insensitively (for example `UI`); advanced SIPp parity remains deferred |
 | `-infindex` | supported | Generates a CSV injection index (`-infindex <file> <field>`); lookup uses generated index files for faster first-column key resolution |
-| `-max_socket` | partial | Caps per-call transport concurrency (`un`, `tn`, `ln`) by limiting simultaneously open call sockets; parser now rejects unsupported transports early |
-| `-max_reconnect` + `-reconnect_sleep` + `-reconnect_close` | partial | Shared client TCP/TLS transports (`t1`, `l1`) support reconnect retries and close-on-reconnect behavior; parser now rejects unsupported transports early |
+| `-max_socket` | partial | Caps per-call transport concurrency (`un`, `tn`, `ln`, UAC alias `cln`) by limiting simultaneously open call sockets; parser now rejects unsupported transports early |
+| `-max_reconnect` + `-reconnect_sleep` + `-reconnect_close` | partial | Shared client TCP/TLS (`t1`, `l1`, or UAC alias `cl` that normalizes to `l1`) support reconnect retries and close-on-reconnect; per-call `ln`/`cln` does not; see [TLS socket modes](#tls-socket-modes-sipp-style) |
 
 ## Trace CLI workflow
 

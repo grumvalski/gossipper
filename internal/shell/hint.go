@@ -54,7 +54,7 @@ func WriteHints(out io.Writer, sess *Session) {
 				lines = append(lines, "UAS: bind to a real routable IP:  set local_bind_ip ADDRESS   (not only 0.0.0.0 in Via)")
 			}
 			t := strings.ToLower(strings.TrimSpace(cfg.Transport))
-			if t != "s1" && t != "sn" && t != "l1" && t != "ln" && t != "sl" {
+			if t != "s1" && t != "sn" && t != "l1" && t != "ln" && t != "sl" && t != "cl" && t != "cln" {
 				lines = append(lines, "For incoming UDP as a server, consider:  set transport s1  or  set transport sn (TLS UAS: l1, ln, or sl)")
 			}
 		}
@@ -90,7 +90,7 @@ func printSetCheatsheet(out io.Writer) {
 	fmt.Fprintln(out, "  set destination_host HOST + set destination_port PORT — same as destination (port defaults to 5060 if omitted)")
 	fmt.Fprintln(out, "  set local_bind_ip IP           — local IP in SIP (short: i)")
 	fmt.Fprintln(out, "  set listen_port 5060           — local UDP/TCP port (short: p)")
-	fmt.Fprintln(out, "  set transport u1|s1|sn|sl|l1|… — transport (short: t; UAS UDP: s1/sn; UAS TLS: l1/ln/sl)")
+	fmt.Fprintln(out, "  set transport u1|cl|l1|s1|sn|sl|… — transport (short: t; UAC TLS: l1/ln or cl/cln; UAS UDP: s1/sn; UAS TLS: l1/ln/sl)")
 	fmt.Fprintln(out, "  set total_calls N              — total calls; 0 = unlimited (short: m)")
 	fmt.Fprintln(out, "  set calls_per_second R         — UAC rate (short: r)")
 	fmt.Fprintln(out, "  set stat_period 5s             — periodic stats line to stderr")

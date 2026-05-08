@@ -84,7 +84,7 @@ func RunWizard(in *bufio.Reader, out, errOut io.Writer, s *Session) error {
 			}
 		}
 
-		t, err := readLine(in, out, "Transport (transport / -t): u1 un ui t1 tn l1 ln", "u1")
+		t, err := readLine(in, out, "Transport (-t): u1 un ui t1 tn l1 ln cl cln (cl/cln = UAC TLS aliases for l1/ln)", "u1")
 		if err != nil {
 			return err
 		}

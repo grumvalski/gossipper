@@ -20,6 +20,7 @@ The current MVP implements:
 - UDP transports `u1`, `un`, and `ui` (pragmatic client+server multi-IP mode)
 - Server-side UDP aliases `s1` and `sn` for UAS-style scenarios (they map to `u1` / `un`; they do **not** enable TLS)
 - Server-side TLS alias `sl` for UAS (maps to `l1`; requires `-tls_cert` and `-tls_key`)
+- Client-side TLS aliases `cl` and `cln` for UAC (map to `l1` and `ln`)
 - TCP transports `t1` and `tn`
 - TLS transports `l1` and `ln` (UAC or UAS; same codes as for TCP, plus TLS files as needed)
 - Global and per-user variable scopes
@@ -61,7 +62,7 @@ The current MVP implements:
 ## Documentation
 
 - `docs/gossipper-vs-sipp.md`: high-level overview of what `Gossipper` can do and how it compares to SIPp
-- `docs/compatibility.md`: current XML, keyword, action, transport, and CLI compatibility matrix
+- `docs/compatibility.md`: current XML, keyword, action, transport, and CLI compatibility matrix (including [TLS socket modes](docs/compatibility.md#tls-socket-modes-sipp-style) vs SIPp / [issue #7](https://github.com/sipcapture/gossipper/issues/7))
 - `docs/architecture.md`: package-level architecture and execution model
 - `docs/media-roadmap.md`: media-related scope, next steps, and deferred items
 - `docs/compatibility-testing.md`: testing approach for compatibility work and regression coverage
@@ -251,13 +252,19 @@ schema, the list of `Kind` values, ring-buffer sizing guidance, and tips for
 high-CPS deployments. The legacy `-trace_*` files keep working in parallel and
 are unaffected by event logging.
 
-Run over TLS:
+Run over TLS (UAC; `-t cl` is the same as `-t l1` after startup):
+
+```bash
+go run ./cmd/gossip -t cl -sf ./testdata/scenarios/basic_uac.xml -rsa 127.0.0.1:5061 -tls_skip_verify
+```
+
+Same with explicit `l1`:
 
 ```bash
 go run ./cmd/gossip -t l1 -sf ./testdata/scenarios/basic_uac.xml -rsa 127.0.0.1:5061 -tls_skip_verify
 ```
 
-**SIP TLS (answers to common support questions):** signaling over TLS **is supported**. Use `-t l1` or `-t ln` (not plain TCP). For a **UAS**, `-t s1` / `-t sn` are **UDP-only** aliases; use `-t l1` / `-t ln` or the SIPp-style TLS server shortcut `-t sl` (same as `l1`). A TLS listener needs `-tls_cert` and `-tls_key`; clients often use `-tls_ca` and `-tls_skip_verify=false` when validating the peer. The default `-tls_skip_verify=true` is convenient for lab setups only.
+**SIP TLS (answers to common support questions):** signaling over TLS **is supported**. For **UAC** use `-t l1` or `-t ln`, or the aliases **`-t cl` / `-t cln`** (same as `l1` / `ln`). For a **UAS**, `-t s1` / `-t sn` are **UDP-only** aliases; use `-t l1` / `-t ln` or the TLS server shortcut `-t sl` (same as `l1`). A TLS listener needs `-tls_cert` and `-tls_key`; clients often use `-tls_ca` and `-tls_skip_verify=false` when validating the peer. The default `-tls_skip_verify=true` is convenient for lab setups only.
 
 Run the built-in **UAS over TLS** (replace certificate paths with real files):
 
@@ -386,9 +393,9 @@ at `/usr/bin/gossipper`.
 - `-base_cseq` sets the seed value used by `[cseq]` token rendering.
 - `-rp` sets the SIPp-compatible rate period in milliseconds for `-r` (`n` calls every `rp` ms).
 - `-rate_increase` adjusts target CPS every `-rate_interval` milliseconds during run; `-rate_max` sets an optional upper cap.
-- `-max_socket` limits simultaneously open call sockets for per-call client transports (`un`, `tn`, `ln`).
-- `-max_reconnect` and `-reconnect_sleep` enable reconnect retries for shared client TCP/TLS transports (`t1`, `l1`) on transport failures.
-- `-reconnect_close` in shared client `t1`/`l1` closes active calls on socket loss by skipping reconnect attempts.
+- `-max_socket` limits simultaneously open call sockets for per-call client transports (`un`, `tn`, `ln`, alias `cln`).
+- `-max_reconnect` and `-reconnect_sleep` enable reconnect retries for shared client TCP/TLS transports (`t1`, `l1`, or the `cl` / `sl` aliases that normalize to `l1`) on transport failures.
+- `-reconnect_close` in shared client `t1`/`l1` (or `cl` / `sl`) closes active calls on socket loss by skipping reconnect attempts.
 - `-infindex <file> <field>` generates an index file next to the CSV (`.gossipper.idx.<field>.json`) so lookup-by-key can avoid full-file scans.
 - `-t ui` currently provides an M3 client+server MVP: one shared UDP socket per configured IP (client: per-call source IP rotation, server: one listener per configured IP).
 - `-inf <file>` + `-ip_field <idx>` are required with `-t ui` and select UI bind IPs from the CSV field (zero-based index).

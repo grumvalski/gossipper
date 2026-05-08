@@ -42,7 +42,7 @@ It is intentionally pragmatic:
 | --- | --- | --- | --- |
 | `-sf`, `-sn`, `-rsa` (or positional remote address), `-s`, `-i`, `-p` | `supported` | `P0` | core scenario and addressing startup flags |
 | `-t u1`, `-t un`, `-t t1`, `-t tn`, `-t l1`, `-t ln` | `supported` | `P0` | core transport coverage for UDP/TCP/TLS modes |
-| `-t s1`, `-t sn`, `-t sl` | `partial` | `P1` | `s1`/`sn`: server-side UDP aliases; `sl`: server TLS alias → `l1` (not SIPp SCTP semantics) |
+| `-t s1`, `-t sn`, `-t sl`, `-t cl`, `-t cln` | `partial` | `P1` | `s1`/`sn`: server UDP; `sl`: server TLS → `l1`; `cl`/`cln`: client TLS → `l1`/`ln` (not SIPp SCTP semantics) |
 | `-t ui`, `-inf`, `-ip_field` | `partial` | `P2` | pragmatic M3 parity implemented: deterministic client/server behavior, explicit bind diagnostics, and TUI launch support for `ui` + `inf` / `ip_field` |
 | `-r`, `-rp`, `-rate_scale`, `-rate_increase`, `-rate_interval`, `-rate_max`, `-max_socket`, `-max_reconnect`, `-reconnect_sleep`, `-reconnect_close`, `-infindex`, `-m`, `-l`, `-users`, `-pause_ms`, `-recv_timeout_ms`, `-timeout_global` | `supported` | `P0` | basic load/scheduling controls are present, including SIPp-style rate periods, runtime rate ramp controls, socket cap for per-call modes, shared TCP/TLS reconnect knobs, indexed injection lookup generation, interactive rate scale, and global run timeout |
 | `-summary_json` | `supported` | `P0` | structured final stats for automation |

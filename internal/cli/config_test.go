@@ -97,6 +97,34 @@ func TestParseAcceptsServerTransportAliases(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsClientTLSAliases(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Parse([]string{
+		"-sn", "uac",
+		"-rsa", "127.0.0.1:5061",
+		"-t", "cl",
+	})
+	if err != nil {
+		t.Fatalf("Parse(cl) error = %v", err)
+	}
+	if cfg.Transport != "cl" {
+		t.Fatalf("unexpected transport %q", cfg.Transport)
+	}
+
+	cfg, err = Parse([]string{
+		"-sn", "uac",
+		"-rsa", "127.0.0.1:5061",
+		"-t", "cln",
+	})
+	if err != nil {
+		t.Fatalf("Parse(cln) error = %v", err)
+	}
+	if cfg.Transport != "cln" {
+		t.Fatalf("unexpected transport %q", cfg.Transport)
+	}
+}
+
 func TestParseAcceptsUITransportWithInjection(t *testing.T) {
 	t.Parallel()
 

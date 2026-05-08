@@ -71,6 +71,54 @@ func TestPrepareRejectsTLSServerAliasForClientScenario(t *testing.T) {
 	}
 }
 
+func TestPrepareNormalizesClientTLSAliases(t *testing.T) {
+	t.Parallel()
+
+	cfg := cli.DefaultConfig()
+	cfg.ScenarioName = "uac"
+	cfg.RemoteHost = "127.0.0.1"
+	cfg.RemotePort = 5061
+	cfg.Transport = "cl"
+
+	prepared, err := Prepare(cfg)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.CLIConfig.Transport != "l1" || prepared.EngineConfig.Transport != "l1" {
+		t.Fatalf("expected cl normalized to l1, cli=%q engine=%q",
+			prepared.CLIConfig.Transport, prepared.EngineConfig.Transport)
+	}
+
+	cfg.Transport = "cln"
+	prepared, err = Prepare(cfg)
+	if err != nil {
+		t.Fatalf("Prepare(cln) error = %v", err)
+	}
+	if prepared.CLIConfig.Transport != "ln" || prepared.EngineConfig.Transport != "ln" {
+		t.Fatalf("expected cln normalized to ln, cli=%q engine=%q",
+			prepared.CLIConfig.Transport, prepared.EngineConfig.Transport)
+	}
+}
+
+func TestPrepareRejectsClientTLSAliasForServerScenario(t *testing.T) {
+	t.Parallel()
+
+	cfg := cli.DefaultConfig()
+	cfg.ScenarioName = "uas"
+	cfg.Transport = "cl"
+
+	_, err := Prepare(cfg)
+	if err == nil || !strings.Contains(err.Error(), "transport cl requires a client scenario") {
+		t.Fatalf("expected transport validation error, got %v", err)
+	}
+
+	cfg.Transport = "cln"
+	_, err = Prepare(cfg)
+	if err == nil || !strings.Contains(err.Error(), "transport cln requires a client scenario") {
+		t.Fatalf("expected transport validation error for cln, got %v", err)
+	}
+}
+
 func TestPrepareAcceptsUITransportForServerScenario(t *testing.T) {
 	t.Parallel()
 
