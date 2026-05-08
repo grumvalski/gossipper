@@ -15,7 +15,7 @@ func TestRenderFieldUsesDefaultInjectionFile(t *testing.T) {
 	}
 	ctx := Context{
 		BasePath:          dir,
-		CallNumber:        2,
+		CallNumber:        1,
 		InjectionFile:     csvPath,
 		CSVFieldOverrides: make(map[string]map[int]map[int]string),
 	}
@@ -32,6 +32,53 @@ func TestRenderFieldUsesDefaultInjectionFile(t *testing.T) {
 	}
 	if got2 != "beta" {
 		t.Fatalf("field1: got %q want beta", got2)
+	}
+}
+
+func TestRenderFieldCallNumberMapsToNthDataRowAfterSIPpHeader(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "data.csv")
+	if err := os.WriteFile(csvPath, []byte("SEQUENTIAL\na;b\nc;d\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx1 := Context{
+		BasePath:          dir,
+		CallNumber:        1,
+		InjectionFile:     csvPath,
+		CSVFieldOverrides: make(map[string]map[int]map[int]string),
+	}
+	if got, err := ctx1.RenderStrict("[field0]"); err != nil || got != "a" {
+		t.Fatalf("call 1 field0: got %q err %v want a", got, err)
+	}
+	ctx2 := Context{
+		BasePath:          dir,
+		CallNumber:        2,
+		InjectionFile:     csvPath,
+		CSVFieldOverrides: make(map[string]map[int]map[int]string),
+	}
+	if got, err := ctx2.RenderStrict("[field1]"); err != nil || got != "d" {
+		t.Fatalf("call 2 field1: got %q err %v want d", got, err)
+	}
+}
+
+func TestRenderFieldExplicitLineUsesPhysicalCSVRow(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "data.csv")
+	if err := os.WriteFile(csvPath, []byte("SEQUENTIAL\nalpha;beta\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := Context{
+		BasePath:          dir,
+		CallNumber:        1,
+		InjectionFile:     csvPath,
+		CSVFieldOverrides: make(map[string]map[int]map[int]string),
+	}
+	got, err := ctx.RenderStrict("[field0 line=1]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "SEQUENTIAL" {
+		t.Fatalf("explicit line=1 field0: got %q want SEQUENTIAL", got)
 	}
 }
 

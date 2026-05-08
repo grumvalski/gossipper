@@ -715,15 +715,17 @@ func renderFieldTokenWithVariables(key, basePath string, callNumber int, variabl
 		}
 	}
 	lineNumber := callNumber
+	explicitPhysicalLine := false
 	if rawLine := parsed["line"]; rawLine != "" {
 		resolved, ok := resolveLineNumber(rawLine, variables)
 		if !ok {
 			return "", false
 		}
 		lineNumber = resolved
+		explicitPhysicalLine = true
 	}
 
-	record, ok, err := csvRecordAt(basePath, name, lineNumber, overrides)
+	record, ok, err := csvRecordAt(basePath, name, lineNumber, overrides, explicitPhysicalLine)
 	if err != nil || !ok {
 		return "", false
 	}
@@ -759,7 +761,66 @@ func resolveLineNumber(raw string, variables map[string]string) (int, bool) {
 	return lineNumber, true
 }
 
-func csvRecordAt(basePath, name string, lineNumber int, overrides map[string]map[int]map[int]string) ([]string, bool, error) {
+// isIgnorableInfCSVRow matches SIPp/gossipper -inf parsing: skip blank rows and #-comment rows.
+func isIgnorableInfCSVRow(record []string) bool {
+	if len(record) == 0 {
+		return true
+	}
+	if strings.HasPrefix(strings.TrimSpace(record[0]), "#") {
+		return true
+	}
+	for _, cell := range record {
+		if strings.TrimSpace(cell) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+func isSIPpInfDistributionKeyword(s string) bool {
+	switch strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(s, "\ufeff"))) {
+	case "SEQUENTIAL", "RANDOM", "USER":
+		return true
+	default:
+		return false
+	}
+}
+
+// isSIPpDistributionHeaderRecord reports the first content row of a SIPp injection file
+// (SEQUENTIAL|RANDOM|USER), optionally with only empty trailing columns.
+func isSIPpDistributionHeaderRecord(record []string) bool {
+	if len(record) == 0 {
+		return false
+	}
+	if !isSIPpInfDistributionKeyword(record[0]) {
+		return false
+	}
+	for i := 1; i < len(record); i++ {
+		if strings.TrimSpace(record[i]) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// findInfDataRecordsStart returns the 0-based index of the first CSV record used for [fieldN]
+// when line is chosen by call_number (SIPp implicit data rows). Leading ignorable rows and an
+// optional SIPp distribution header row are skipped.
+func findInfDataRecordsStart(records [][]string) int {
+	i := 0
+	for i < len(records) && isIgnorableInfCSVRow(records[i]) {
+		i++
+	}
+	if i >= len(records) {
+		return len(records)
+	}
+	if isSIPpDistributionHeaderRecord(records[i]) {
+		i++
+	}
+	return i
+}
+
+func csvRecordAt(basePath, name string, lineNumber int, overrides map[string]map[int]map[int]string, physicalLine bool) ([]string, bool, error) {
 	if lineNumber <= 0 {
 		return nil, false, nil
 	}
@@ -780,11 +841,23 @@ func csvRecordAt(basePath, name string, lineNumber int, overrides map[string]map
 	reader.FieldsPerRecord = -1
 	reader.Comma = sniffFieldCSVCommaFromPeek(peek[:n])
 	records, err := reader.ReadAll()
-	if err != nil || len(records) < lineNumber {
+	if err != nil {
 		return nil, false, err
 	}
-	record := append([]string(nil), records[lineNumber-1]...)
-	applyCSVFieldOverrides(path, lineNumber, record, overrides)
+	var idx int
+	if physicalLine {
+		idx = lineNumber - 1
+	} else {
+		// SIPp -inf: optional first non-data row names distribution (SEQUENTIAL|RANDOM|USER).
+		// Implicit [fieldN] line = call_number selects the Nth data row, not that header row.
+		start := findInfDataRecordsStart(records)
+		idx = start + lineNumber - 1
+	}
+	if idx < 0 || idx >= len(records) {
+		return nil, false, nil
+	}
+	record := append([]string(nil), records[idx]...)
+	applyCSVFieldOverrides(path, idx+1, record, overrides)
 	return record, true, nil
 }
 
@@ -829,7 +902,7 @@ func ApplyCSVMutation(
 	if field < 0 {
 		return fmt.Errorf("csv mutation field must be >= 0")
 	}
-	record, ok, err := csvRecordAt(basePath, name, lineNumber, overrides)
+	record, ok, err := csvRecordAt(basePath, name, lineNumber, overrides, true)
 	if err != nil {
 		return err
 	}
