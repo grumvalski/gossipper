@@ -5,6 +5,20 @@ import (
 	"testing"
 )
 
+func TestNormalizeSIPScenarioLineIndentFlushStartLineRestIndented(t *testing.T) {
+	t.Parallel()
+	raw := "REGISTER sip:example.com SIP/2.0\r\n" +
+		"      Via: SIP/2.0/TCP 10.0.0.1:5060;branch=z9hG4bK-1\r\n" +
+		"      Content-Length: 0\r\n\r\n"
+	got := normalizeSIPScenarioLineIndent(raw)
+	want := "REGISTER sip:example.com SIP/2.0\r\n" +
+		"Via: SIP/2.0/TCP 10.0.0.1:5060;branch=z9hG4bK-1\r\n" +
+		"Content-Length: 0\r\n\r\n"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestNormalizeSIPScenarioLineIndentStripsCommonXMLPadding(t *testing.T) {
 	t.Parallel()
 	raw := "      REGISTER sip:example.com SIP/2.0\r\n" +

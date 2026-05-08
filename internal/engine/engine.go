@@ -2199,12 +2199,24 @@ func dedentSIPHeaderLines(head string) string {
 		return head
 	}
 	lines := strings.Split(head, "\r\n")
+	// If the start line (request or status) is flush-left but following header lines
+	// are XML-indented, global min would be 0 and nothing would strip — handle that.
+	skipFirstForMin := false
+	if len(lines) > 0 {
+		first := lines[0]
+		if strings.TrimSpace(first) != "" && countLeadingSpaceTab(first) == 0 {
+			skipFirstForMin = true
+		}
+	}
 	min := -1
-	for _, line := range lines {
+	for i, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		n := countLeadingSpaceTab(line)
+		if skipFirstForMin && i == 0 {
+			continue
+		}
 		if min < 0 || n < min {
 			min = n
 		}
@@ -2213,8 +2225,13 @@ func dedentSIPHeaderLines(head string) string {
 		return head
 	}
 	for i := range lines {
-		if len(lines[i]) >= min {
-			lines[i] = lines[i][min:]
+		line := lines[i]
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		n := countLeadingSpaceTab(line)
+		if n >= min {
+			lines[i] = line[min:]
 		}
 	}
 	return strings.Join(lines, "\r\n")
