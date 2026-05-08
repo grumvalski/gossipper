@@ -2169,6 +2169,69 @@ func randomBranch(callNumber, messageIndex int) string {
 	return fmt.Sprintf("z9hG4bK-gossip-%d-%d", callNumber, messageIndex)
 }
 
+// normalizeSIPScenarioLineIndent strips a common leading space/tab prefix from each
+// line in the SIP headers (before the first blank line), matching typical SIPp/XML
+// CDATA indentation so Via/From are not sent with leading spaces.
+func normalizeSIPScenarioLineIndent(msg string) string {
+	if msg == "" {
+		return msg
+	}
+	const sep = "\r\n\r\n"
+	idx := strings.Index(msg, sep)
+	var head, body string
+	foundSep := false
+	if idx >= 0 {
+		foundSep = true
+		head = msg[:idx]
+		body = msg[idx+len(sep):]
+	} else {
+		head = msg
+	}
+	head = dedentSIPHeaderLines(head)
+	if foundSep {
+		return head + sep + body
+	}
+	return head
+}
+
+func dedentSIPHeaderLines(head string) string {
+	if head == "" {
+		return head
+	}
+	lines := strings.Split(head, "\r\n")
+	min := -1
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		n := countLeadingSpaceTab(line)
+		if min < 0 || n < min {
+			min = n
+		}
+	}
+	if min <= 0 {
+		return head
+	}
+	for i := range lines {
+		if len(lines[i]) >= min {
+			lines[i] = lines[i][min:]
+		}
+	}
+	return strings.Join(lines, "\r\n")
+}
+
+func countLeadingSpaceTab(s string) int {
+	n := 0
+	for _, r := range s {
+		if r == ' ' || r == '\t' {
+			n++
+		} else {
+			break
+		}
+	}
+	return n
+}
+
 func ensureMessageTerminator(msg string) string {
 	if len(msg) >= 4 && msg[len(msg)-4:] == "\r\n\r\n" {
 		return msg

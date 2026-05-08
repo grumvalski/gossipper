@@ -29,7 +29,7 @@ func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error)
 		if err != nil {
 			return "", err
 		}
-		return ensureMessageTerminator(rendered), nil
+		return ensureMessageTerminator(normalizeSIPScenarioLineIndent(rendered)), nil
 	}
 
 	provisionalCtx := ctx
@@ -42,6 +42,7 @@ func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error)
 	if err != nil {
 		return "", err
 	}
+	provisional = normalizeSIPScenarioLineIndent(provisional)
 	provisional = ensureMessageTerminator(provisional)
 
 	finalCtx := ctx
@@ -57,7 +58,7 @@ func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return ensureMessageTerminator(rendered), nil
+	return ensureMessageTerminator(normalizeSIPScenarioLineIndent(rendered)), nil
 }
 
 func (e *Engine) buildAuthHeader(outgoing string, ctx templ.Context, option authKeywordOptions) (string, error) {
