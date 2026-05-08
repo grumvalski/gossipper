@@ -1025,14 +1025,14 @@ func TestParseAcceptsTLSClientWithInjection(t *testing.T) {
 	}
 }
 
-func TestParseAcceptsTLSInfWithoutIPField(t *testing.T) {
+func TestParseAcceptsClientInfWithoutIPField(t *testing.T) {
 	t.Parallel()
 
 	injectionPath := filepath.Join(t.TempDir(), "ips.csv")
 	if err := os.WriteFile(injectionPath, []byte("SEQUENTIAL\n127.0.0.2\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(injection) error = %v", err)
 	}
-	for _, transport := range []string{"cl", "cln", "l1", "ln"} {
+	for _, transport := range []string{"cl", "cln", "l1", "ln", "t1", "tn"} {
 		transport := transport
 		t.Run(transport, func(t *testing.T) {
 			t.Parallel()
@@ -1050,6 +1050,34 @@ func TestParseAcceptsTLSInfWithoutIPField(t *testing.T) {
 			}
 			if cfg.InjectionFile != injectionPath {
 				t.Fatalf("expected InjectionFile set, got %q", cfg.InjectionFile)
+			}
+		})
+	}
+}
+
+func TestParseRejectsTCPInfWithIPField(t *testing.T) {
+	t.Parallel()
+
+	injectionPath := filepath.Join(t.TempDir(), "ips.csv")
+	if err := os.WriteFile(injectionPath, []byte("127.0.0.2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(injection) error = %v", err)
+	}
+	for _, transport := range []string{"t1", "tn"} {
+		transport := transport
+		t.Run(transport, func(t *testing.T) {
+			t.Parallel()
+			_, err := Parse([]string{
+				"-sn", "uac",
+				"-rsa", "127.0.0.1:5060",
+				"-t", transport,
+				"-inf", injectionPath,
+				"-ip_field", "0",
+			})
+			if err == nil {
+				t.Fatal("expected Parse() to reject -ip_field with TCP client + inf")
+			}
+			if !strings.Contains(err.Error(), "t1/tn") {
+				t.Fatalf("expected t1/tn error, got %v", err)
 			}
 		})
 	}

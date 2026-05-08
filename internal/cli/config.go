@@ -197,8 +197,8 @@ func Parse(args []string) (Config, error) {
 	fs.StringVar(&cfg.Transport, "t", cfg.Transport, "transport: u1/un/ui, t1/tn, l1/ln; client TLS aliases cl/cln; server UDP s1/sn; server TLS sl")
 	fs.StringVar(&cfg.LocalIP, "i", cfg.LocalIP, "local IP address")
 	fs.IntVar(&cfg.LocalPort, "p", cfg.LocalPort, "local port")
-	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV path: with ui, bind/source IP column requires -ip_field; with TLS (cl/cln/l1/ln) optional -ip_field for per-row bind IPs, else bind uses -i / [local_ip] from socket")
-	fs.IntVar(&cfg.IPField, "ip_field", cfg.IPField, "zero-based CSV column for bind/source IP (required with -inf for ui; optional for TLS cl/cln/l1/ln when using CSV bind list)")
+	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV path: with ui, bind/source IP column requires -ip_field; with TLS (cl/cln/l1/ln) optional -ip_field for per-row bind IPs; with TCP (t1/tn) optional -inf without -ip_field for [fieldN] only (bind uses -i)")
+	fs.IntVar(&cfg.IPField, "ip_field", cfg.IPField, "zero-based CSV column for bind/source IP (required with -inf for ui; optional for TLS cl/cln/l1/ln; not supported with TCP t1/tn)")
 	fs.IntVar(&cfg.IPField, "ipfield", cfg.IPField, "alias for -ip_field (SIPp-compatible)")
 	fs.StringVar(&cfg.AuthUsername, "au", cfg.AuthUsername, "authorization username for authentication challenges")
 	fs.StringVar(&cfg.AuthPassword, "ap", cfg.AuthPassword, "authorization password for authentication challenges")
@@ -398,7 +398,7 @@ func Parse(args []string) (Config, error) {
 	}
 	if cfg.InjectionFile != "" && cfg.IPField < 0 {
 		switch cfg.Transport {
-		case "cl", "cln", "l1", "ln":
+		case "cl", "cln", "l1", "ln", "t1", "tn":
 			// SIPp-style: -inf without -ip_field does not load bind IPs; use -i and [local_ip] from socket.
 		default:
 			return Config{}, errors.New("ip_field must be specified when inf is set")
@@ -426,8 +426,12 @@ func Parse(args []string) (Config, error) {
 				}
 				cfg.UISourceIPs = sourceIPs
 			}
+		case "t1", "tn":
+			if cfg.IPField >= 0 {
+				return Config{}, errors.New("transport t1/tn does not support -ip_field with -inf (use -i for local bind; use -inf without -ip_field for CSV [fieldN] only)")
+			}
 		default:
-			return Config{}, errors.New("inf and ip_field are only supported with transport ui or TLS client (cl/cln/l1/ln)")
+			return Config{}, errors.New("inf and ip_field are only supported with transport ui, TLS client (cl/cln/l1/ln), or -inf alone with TCP client (t1/tn)")
 		}
 	}
 
