@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 func ErrUnknownScenario(name string) error {
@@ -122,7 +125,7 @@ func ParseFile(path string) (Scenario, error) {
 
 func ParseString(data string) (Scenario, error) {
 	var raw rawScenario
-	if err := xml.Unmarshal([]byte(data), &raw); err != nil {
+	if err := xmlDecodeScenario([]byte(data), &raw); err != nil {
 		return Scenario{}, err
 	}
 
@@ -434,4 +437,80 @@ func parseBool(value string) bool {
 	default:
 		return false
 	}
+}
+
+// xmlDecodeScenario decodes SIPp-style scenario XML. If the prolog declares
+// ISO-8859-1 (Latin-1), the document is transcoded to UTF-8 and the
+// encoding declaration is rewritten so encoding/xml does not require
+// CharsetReader (which is easy to misconfigure for attributes).
+func xmlDecodeScenario(data []byte, v any) error {
+	out, err := scenarioXMLToUTF8(data)
+	if err != nil {
+		return err
+	}
+	return xml.Unmarshal(out, v)
+}
+
+func scenarioXMLToUTF8(data []byte) ([]byte, error) {
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	enc := strings.ToLower(strings.TrimSpace(sniffXMLDeclEncoding(data)))
+	switch enc {
+	case "", "utf-8", "utf8":
+		return data, nil
+	case "iso-8859-1", "iso8859-1", "latin-1", "latin1", "ibm819", "cp819", "csisolatin1":
+		out, err := charmap.ISO8859_1.NewDecoder().Bytes(data)
+		if err != nil {
+			return nil, err
+		}
+		return rewriteXMLDeclEncodingToUTF8(out), nil
+	default:
+		return nil, fmt.Errorf("scenario XML encoding %q is not supported (supported: utf-8, iso-8859-1)", enc)
+	}
+}
+
+func sniffXMLDeclEncoding(data []byte) string {
+	end := bytes.Index(data, []byte("?>"))
+	if end < 0 {
+		return ""
+	}
+	head := string(data[:end+2])
+	lower := strings.ToLower(head)
+	const key = "encoding="
+	i := strings.Index(lower, key)
+	if i < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(head[i+len(key):])
+	if len(rest) == 0 {
+		return ""
+	}
+	q := rest[0]
+	if q != '"' && q != '\'' {
+		return ""
+	}
+	rest = rest[1:]
+	j := strings.IndexByte(rest, q)
+	if j < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:j])
+}
+
+func rewriteXMLDeclEncodingToUTF8(b []byte) []byte {
+	replacements := [][2][]byte{
+		{[]byte(`encoding="ISO-8859-1"`), []byte(`encoding="UTF-8"`)},
+		{[]byte(`encoding='ISO-8859-1'`), []byte(`encoding='UTF-8'`)},
+		{[]byte(`encoding="iso-8859-1"`), []byte(`encoding="UTF-8"`)},
+		{[]byte(`encoding='iso-8859-1'`), []byte(`encoding='UTF-8'`)},
+		{[]byte(`encoding="Latin-1"`), []byte(`encoding="UTF-8"`)},
+		{[]byte(`encoding='Latin-1'`), []byte(`encoding='UTF-8'`)},
+		{[]byte(`encoding="latin1"`), []byte(`encoding="UTF-8"`)},
+		{[]byte(`encoding='latin1'`), []byte(`encoding='UTF-8'`)},
+	}
+	for _, p := range replacements {
+		if bytes.Contains(b, p[0]) {
+			return bytes.Replace(b, p[0], p[1], 1)
+		}
+	}
+	return b
 }

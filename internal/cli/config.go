@@ -197,8 +197,8 @@ func Parse(args []string) (Config, error) {
 	fs.StringVar(&cfg.Transport, "t", cfg.Transport, "transport: u1/un/ui, t1/tn, l1/ln; client TLS aliases cl/cln; server UDP s1/sn; server TLS sl")
 	fs.StringVar(&cfg.LocalIP, "i", cfg.LocalIP, "local IP address")
 	fs.IntVar(&cfg.LocalPort, "p", cfg.LocalPort, "local port")
-	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV injection file: source IP for ui (UDP); local bind IP for TLS client cl/cln/l1/ln")
-	fs.IntVar(&cfg.IPField, "ip_field", cfg.IPField, "zero-based CSV field index for source/bind IP (ui, or TLS client cl/cln/l1/ln)")
+	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV path: with ui, bind/source IP column requires -ip_field; with TLS (cl/cln/l1/ln) optional -ip_field for per-row bind IPs, else bind uses -i / [local_ip] from socket")
+	fs.IntVar(&cfg.IPField, "ip_field", cfg.IPField, "zero-based CSV column for bind/source IP (required with -inf for ui; optional for TLS cl/cln/l1/ln when using CSV bind list)")
 	fs.IntVar(&cfg.IPField, "ipfield", cfg.IPField, "alias for -ip_field (SIPp-compatible)")
 	fs.StringVar(&cfg.AuthUsername, "au", cfg.AuthUsername, "authorization username for authentication challenges")
 	fs.StringVar(&cfg.AuthPassword, "ap", cfg.AuthPassword, "authorization password for authentication challenges")
@@ -397,7 +397,12 @@ func Parse(args []string) (Config, error) {
 		return Config{}, fmt.Errorf("unsupported transport %q", cfg.Transport)
 	}
 	if cfg.InjectionFile != "" && cfg.IPField < 0 {
-		return Config{}, errors.New("ip_field must be specified when inf is set")
+		switch cfg.Transport {
+		case "cl", "cln", "l1", "ln":
+			// SIPp-style: -inf without -ip_field does not load bind IPs; use -i and [local_ip] from socket.
+		default:
+			return Config{}, errors.New("ip_field must be specified when inf is set")
+		}
 	}
 	if cfg.IPField >= 0 && cfg.InjectionFile == "" {
 		return Config{}, errors.New("inf must be specified when ip_field is set")
@@ -414,11 +419,13 @@ func Parse(args []string) (Config, error) {
 	} else if cfg.InjectionFile != "" || cfg.IPField >= 0 {
 		switch cfg.Transport {
 		case "cl", "cln", "l1", "ln":
-			sourceIPs, err := loadSourceIPsFromInjection(cfg.InjectionFile, cfg.IPField)
-			if err != nil {
-				return Config{}, err
+			if cfg.InjectionFile != "" && cfg.IPField >= 0 {
+				sourceIPs, err := loadSourceIPsFromInjection(cfg.InjectionFile, cfg.IPField)
+				if err != nil {
+					return Config{}, err
+				}
+				cfg.UISourceIPs = sourceIPs
 			}
-			cfg.UISourceIPs = sourceIPs
 		default:
 			return Config{}, errors.New("inf and ip_field are only supported with transport ui or TLS client (cl/cln/l1/ln)")
 		}

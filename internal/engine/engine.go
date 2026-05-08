@@ -34,6 +34,7 @@ var (
 	errStopNow              = errors.New("stop execution now")
 	errUnexpectedToMain     = errors.New("unexpected SIP routed to _unexp.main")
 	errOptionalRecvMismatch = errors.New("optional recv mismatched with incoming SIP")
+	errSIPMailboxClosed     = errors.New("sip mailbox closed (transport ended)")
 	parseHeadersLinesPool   = sync.Pool{New: func() interface{} { return new([]string) }}
 )
 
@@ -96,6 +97,8 @@ type Config struct {
 	CommandName      string
 	CommandPeers     map[string]string
 	UISourceIPs      []string
+	// InjectionFile is the CLI -inf CSV path; used as default for [fieldN] without file=.
+	InjectionFile string
 
 	// Log is the structured event logger used for SIP/call/auth events.
 	// nil is treated as eventlog.Noop().
@@ -284,7 +287,9 @@ func (e *Engine) runClientCommandOnly(ctx context.Context) error {
 			return err
 		}
 
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -351,7 +356,9 @@ func (e *Engine) runClientShared(ctx context.Context) error {
 			return err
 		}
 
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -362,12 +369,7 @@ func (e *Engine) runClientShared(ctx context.Context) error {
 			defer registry.unregister(callID)
 
 			receive := func(waitCtx context.Context) (*sip.Message, error) {
-				select {
-				case <-waitCtx.Done():
-					return nil, waitCtx.Err()
-				case msg := <-inbox:
-					return msg, nil
-				}
+				return recvPooledFromMailboxWaitFirst(waitCtx, inbox)
 			}
 
 			send := func(payload []byte) error {
@@ -415,7 +417,9 @@ func (e *Engine) runClientPerCall(ctx context.Context) error {
 			return err
 		}
 
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -502,7 +506,9 @@ func (e *Engine) runClientPerSourceIP(ctx context.Context) error {
 			return err
 		}
 
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -519,12 +525,7 @@ func (e *Engine) runClientPerSourceIP(ctx context.Context) error {
 			defer registry.unregister(callID)
 
 			receive := func(waitCtx context.Context) (*sip.Message, error) {
-				select {
-				case <-waitCtx.Done():
-					return nil, waitCtx.Err()
-				case msg := <-inbox:
-					return msg, nil
-				}
+				return recvPooledFromMailboxWaitFirst(waitCtx, inbox)
 			}
 
 			send := func(payload []byte) error {
@@ -582,7 +583,9 @@ func (e *Engine) runClientSharedTCP(ctx context.Context) error {
 			return err
 		}
 
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -593,17 +596,7 @@ func (e *Engine) runClientSharedTCP(ctx context.Context) error {
 			defer registry.unregister(callID)
 
 			receive := func(waitCtx context.Context) (*sip.Message, error) {
-				select {
-				case msg := <-inbox:
-					return msg, nil
-				default:
-				}
-				select {
-				case msg := <-inbox:
-					return msg, nil
-				case <-waitCtx.Done():
-					return nil, waitCtx.Err()
-				}
+				return recvPooledFromMailboxTryBuffer(waitCtx, inbox)
 			}
 			send := func(payload []byte) error {
 				return shared.Send(payload)
@@ -638,7 +631,9 @@ func (e *Engine) runClientPerCallTCP(ctx context.Context) error {
 			return err
 		}
 
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -678,6 +673,65 @@ func (e *Engine) runClientPerCallTCP(ctx context.Context) error {
 
 func (e *Engine) waitForNextCall(ctx context.Context) error {
 	return e.rate.Wait(ctx)
+}
+
+// acquireCallSemaphore takes one slot from a buffered semaphore or returns ctx.Err()
+// when the parent context is cancelled (so SIGINT cannot wedge the scheduler).
+func acquireCallSemaphore(ctx context.Context, sem chan struct{}) error {
+	select {
+	case sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// recvPooledFromMailboxWaitFirst waits for waitCtx or the next *sip.Message from inbox.
+// A closed inbox yields errSIPMailboxClosed instead of (nil, nil).
+func recvPooledFromMailboxWaitFirst(waitCtx context.Context, inbox <-chan *sip.Message) (*sip.Message, error) {
+	select {
+	case <-waitCtx.Done():
+		return nil, waitCtx.Err()
+	case msg, ok := <-inbox:
+		if !ok || msg == nil {
+			return nil, errSIPMailboxClosed
+		}
+		return msg, nil
+	}
+}
+
+// recvPooledFromMailboxTryBuffer drains a buffered message without blocking, then waits.
+func recvPooledFromMailboxTryBuffer(waitCtx context.Context, inbox <-chan *sip.Message) (*sip.Message, error) {
+	select {
+	case msg, ok := <-inbox:
+		if !ok || msg == nil {
+			return nil, errSIPMailboxClosed
+		}
+		return msg, nil
+	default:
+	}
+	select {
+	case <-waitCtx.Done():
+		return nil, waitCtx.Err()
+	case msg, ok := <-inbox:
+		if !ok || msg == nil {
+			return nil, errSIPMailboxClosed
+		}
+		return msg, nil
+	}
+}
+
+// recvSIPValueFromMailboxWaitFirst reads a sip.Message value from a server-side inbox.
+func recvSIPValueFromMailboxWaitFirst(waitCtx context.Context, inbox <-chan sip.Message) (sip.Message, error) {
+	select {
+	case <-waitCtx.Done():
+		return sip.Message{}, waitCtx.Err()
+	case msg, ok := <-inbox:
+		if !ok {
+			return sip.Message{}, errSIPMailboxClosed
+		}
+		return msg, nil
+	}
 }
 
 func (e *Engine) callConcurrencyLimit(perCallSocket bool) int {
@@ -855,12 +909,7 @@ func (e *Engine) runServerUDP(ctx context.Context) error {
 					sess.inbox <- startMsg
 
 					receive := func(waitCtx context.Context) (*sip.Message, error) {
-						select {
-						case <-waitCtx.Done():
-							return nil, waitCtx.Err()
-						case msg := <-sess.inbox:
-							return msg, nil
-						}
+						return recvPooledFromMailboxWaitFirst(waitCtx, sess.inbox)
 					}
 					send := func(payload []byte) error {
 						return sess.shared.Send(payload, sess.remote)
@@ -1015,12 +1064,7 @@ func (e *Engine) runServerPerSourceIP(ctx context.Context) error {
 						}()
 						sess.inbox <- startMsg
 						receive := func(waitCtx context.Context) (*sip.Message, error) {
-							select {
-							case <-waitCtx.Done():
-								return nil, waitCtx.Err()
-							case msg := <-sess.inbox:
-								return msg, nil
-							}
+							return recvPooledFromMailboxWaitFirst(waitCtx, sess.inbox)
 						}
 						send := func(payload []byte) error {
 							return sess.shared.Send(payload, sess.remote)
@@ -1137,12 +1181,7 @@ func (e *Engine) runServerTCPShared(ctx context.Context) error {
 						mu.Unlock()
 					}()
 					receive := func(waitCtx context.Context) (sip.Message, error) {
-						select {
-						case <-waitCtx.Done():
-							return sip.Message{}, waitCtx.Err()
-						case msg := <-inbox:
-							return msg, nil
-						}
+						return recvSIPValueFromMailboxWaitFirst(waitCtx, inbox)
 					}
 					send := func(payload []byte) error {
 						writeMu.Lock()
@@ -1209,7 +1248,10 @@ func (e *Engine) runServerTCPPerConn(ctx context.Context) error {
 				select {
 				case <-waitCtx.Done():
 					return sip.Message{}, waitCtx.Err()
-				case msg := <-inbox:
+				case msg, ok := <-inbox:
+					if !ok {
+						return sip.Message{}, errSIPMailboxClosed
+					}
 					return msg, nil
 				default:
 					msg, err := reader.Read(waitCtx)
@@ -1331,6 +1373,7 @@ func (e *Engine) executeCall(
 		},
 		CSVFieldOverrides: make(map[string]map[int]map[int]string),
 		BasePath:          e.cfg.Scenario.BasePath,
+		InjectionFile:     e.cfg.InjectionFile,
 	}
 	currentRemoteHost := remoteHost
 	currentRemoteIP := remoteHost
@@ -1735,6 +1778,9 @@ func classifyCallFailure(err error, sawUnexpectedSIP bool) string {
 	if errors.Is(err, context.Canceled) {
 		return "cancelled"
 	}
+	if errors.Is(err, errSIPMailboxClosed) {
+		return "transport_error"
+	}
 	if errors.Is(err, io.EOF) {
 		return "transport_error"
 	}
@@ -1791,7 +1837,8 @@ func (e *Engine) waitForMatch(
 	for {
 		waitFor := time.Until(deadline)
 		if waitFor <= 0 {
-			return nil, context.DeadlineExceeded
+			return nil, fmt.Errorf("sip recv: exceeded total wait %v (request=%q response=%q): %w",
+				timeout, strings.TrimSpace(cmd.RecvReq), strings.TrimSpace(cmd.RecvResp), context.DeadlineExceeded)
 		}
 
 		receiveCtx, cancel := context.WithTimeout(ctx, minDuration(waitFor, nextRetrans(retrans)))
@@ -1831,8 +1878,12 @@ func (e *Engine) waitForMatch(
 			continue
 		}
 
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, context.DeadlineExceeded
+		if errors.Is(err, context.Canceled) {
+			return nil, err
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("sip recv: timed out after %v (request=%q response=%q): %w",
+				timeout, strings.TrimSpace(cmd.RecvReq), strings.TrimSpace(cmd.RecvResp), err)
 		}
 		return nil, err
 	}
@@ -2031,6 +2082,9 @@ func adaptReceiveToPtr(receive func(context.Context) (sip.Message, error)) func(
 		msg, err := receive(ctx)
 		if err != nil {
 			return nil, err
+		}
+		if msg.Raw == "" && msg.StatusCode == 0 && msg.Method == "" {
+			return nil, errSIPMailboxClosed
 		}
 		m := sip.GetMessage()
 		sip.CopyInto(m, msg)

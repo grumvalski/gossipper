@@ -26,12 +26,12 @@ type SharedTLS struct {
 	closed      chan struct{}
 }
 
-func NewSharedTLS(localAddr, remoteAddr string, cfg *tls.Config) (*SharedTLS, error) {
-	return NewSharedTLSWithReconnect(localAddr, remoteAddr, cfg, ReconnectOptions{})
+func NewSharedTLS(ctx context.Context, localAddr, remoteAddr string, cfg *tls.Config) (*SharedTLS, error) {
+	return NewSharedTLSWithReconnect(ctx, localAddr, remoteAddr, cfg, ReconnectOptions{})
 }
 
-func NewSharedTLSWithReconnect(localAddr, remoteAddr string, cfg *tls.Config, reconnect ReconnectOptions) (*SharedTLS, error) {
-	conn, err := dialSharedTLS(localAddr, remoteAddr, cfg)
+func NewSharedTLSWithReconnect(ctx context.Context, localAddr, remoteAddr string, cfg *tls.Config, reconnect ReconnectOptions) (*SharedTLS, error) {
+	conn, err := dialSharedTLS(ctx, localAddr, remoteAddr, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (s *SharedTLS) tryReconnect() bool {
 				return false
 			}
 		}
-		conn, err := dialSharedTLS(s.localAddr, s.remoteAddr, s.tlsConfig)
+		conn, err := dialSharedTLS(context.Background(), s.localAddr, s.remoteAddr, s.tlsConfig)
 		if err != nil {
 			continue
 		}
@@ -186,13 +186,25 @@ func (s *SharedTLS) sleepUnlessClosed(d time.Duration) bool {
 	}
 }
 
-func dialSharedTLS(localAddr, remoteAddr string, cfg *tls.Config) (*tls.Conn, error) {
+func dialSharedTLS(ctx context.Context, localAddr, remoteAddr string, cfg *tls.Config) (*tls.Conn, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	local, err := net.ResolveTCPAddr("tcp", localAddr)
 	if err != nil {
 		return nil, err
 	}
 	dialer := &net.Dialer{LocalAddr: local}
-	return tls.DialWithDialer(dialer, "tcp", remoteAddr, cfg)
+	rawConn, err := dialer.DialContext(ctx, "tcp", remoteAddr)
+	if err != nil {
+		return nil, err
+	}
+	tlsConn := tls.Client(rawConn, cfg)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		_ = rawConn.Close()
+		return nil, err
+	}
+	return tlsConn, nil
 }
 
 type DialogTLS struct {
@@ -200,13 +212,8 @@ type DialogTLS struct {
 	reader *bufio.Reader
 }
 
-func NewDialogTLS(localAddr, remoteAddr string, cfg *tls.Config) (*DialogTLS, error) {
-	local, err := net.ResolveTCPAddr("tcp", localAddr)
-	if err != nil {
-		return nil, err
-	}
-	dialer := &net.Dialer{LocalAddr: local}
-	conn, err := tls.DialWithDialer(dialer, "tcp", remoteAddr, cfg)
+func NewDialogTLS(ctx context.Context, localAddr, remoteAddr string, cfg *tls.Config) (*DialogTLS, error) {
+	conn, err := dialSharedTLS(ctx, localAddr, remoteAddr, cfg)
 	if err != nil {
 		return nil, err
 	}

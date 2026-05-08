@@ -146,6 +146,9 @@ func (e *Engine) wrapSIPReceive(callNumber int, callID string, localIP string, l
 		if err != nil {
 			return nil, err
 		}
+		if msg == nil || (msg.Raw == "" && msg.StatusCode == 0 && msg.Method == "") {
+			return nil, errSIPMailboxClosed
+		}
 		e.observeSIP("recv", callNumber, callID, localIP, localPort, remoteIP, remotePort, []byte(msg.Raw))
 		return msg, nil
 	}

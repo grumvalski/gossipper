@@ -1025,6 +1025,36 @@ func TestParseAcceptsTLSClientWithInjection(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsTLSInfWithoutIPField(t *testing.T) {
+	t.Parallel()
+
+	injectionPath := filepath.Join(t.TempDir(), "ips.csv")
+	if err := os.WriteFile(injectionPath, []byte("SEQUENTIAL\n127.0.0.2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(injection) error = %v", err)
+	}
+	for _, transport := range []string{"cl", "cln", "l1", "ln"} {
+		transport := transport
+		t.Run(transport, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := Parse([]string{
+				"-sn", "uac",
+				"-rsa", "127.0.0.1:5061",
+				"-t", transport,
+				"-inf", injectionPath,
+			})
+			if err != nil {
+				t.Fatalf("Parse(%s) error = %v", transport, err)
+			}
+			if len(cfg.UISourceIPs) != 0 {
+				t.Fatalf("expected empty UISourceIPs without -ip_field for %s, got %+v", transport, cfg.UISourceIPs)
+			}
+			if cfg.InjectionFile != injectionPath {
+				t.Fatalf("expected InjectionFile set, got %q", cfg.InjectionFile)
+			}
+		})
+	}
+}
+
 func TestParseRejectsInvalidIPInInjection(t *testing.T) {
 	t.Parallel()
 

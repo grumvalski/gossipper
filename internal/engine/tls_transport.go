@@ -22,7 +22,7 @@ func (e *Engine) runClientSharedTLS(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	shared, err := transport.NewSharedTLSWithReconnect(localAddr, remoteAddr, tlsCfg, transport.ReconnectOptions{
+	shared, err := transport.NewSharedTLSWithReconnect(ctx, localAddr, remoteAddr, tlsCfg, transport.ReconnectOptions{
 		MaxAttempts:      e.cfg.MaxReconnect,
 		Sleep:            e.cfg.ReconnectSleep,
 		CloseOnReconnect: e.cfg.ReconnectClose,
@@ -46,7 +46,9 @@ func (e *Engine) runClientSharedTLS(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker:
 		}
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -55,17 +57,7 @@ func (e *Engine) runClientSharedTLS(ctx context.Context) error {
 			inbox := registry.register(callID)
 			defer registry.unregister(callID)
 			receive := func(waitCtx context.Context) (*sip.Message, error) {
-				select {
-				case msg := <-inbox:
-					return msg, nil
-				default:
-				}
-				select {
-				case msg := <-inbox:
-					return msg, nil
-				case <-waitCtx.Done():
-					return nil, waitCtx.Err()
-				}
+				return recvPooledFromMailboxTryBuffer(waitCtx, inbox)
 			}
 			send := func(payload []byte) error { return shared.Send(payload) }
 			localIP := resolveLocalIP(shared.LocalPort(), bindIP)
@@ -98,7 +90,9 @@ func (e *Engine) runClientPerCallTLS(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker:
 		}
-		sem <- struct{}{}
+		if err := acquireCallSemaphore(ctx, sem); err != nil {
+			return err
+		}
 		wg.Add(1)
 		go func(callNumber int) {
 			defer wg.Done()
@@ -107,7 +101,7 @@ func (e *Engine) runClientPerCallTLS(ctx context.Context) error {
 			if len(e.cfg.UISourceIPs) > 0 {
 				bindIP = e.sourceIPForCall(callNumber)
 			}
-			dialog, err := transport.NewDialogTLS(fmt.Sprintf("%s:%d", bindIP, e.cfg.LocalPort), remoteAddr, tlsCfg)
+			dialog, err := transport.NewDialogTLS(ctx, fmt.Sprintf("%s:%d", bindIP, e.cfg.LocalPort), remoteAddr, tlsCfg)
 			if err != nil {
 				once.Do(func() { runErr = err })
 				return
@@ -190,12 +184,7 @@ func (e *Engine) runServerTLSShared(ctx context.Context) error {
 						mu.Unlock()
 					}()
 					receive := adaptReceiveToPtr(func(waitCtx context.Context) (sip.Message, error) {
-						select {
-						case <-waitCtx.Done():
-							return sip.Message{}, waitCtx.Err()
-						case msg := <-inbox:
-							return msg, nil
-						}
+						return recvSIPValueFromMailboxWaitFirst(waitCtx, inbox)
 					})
 					send := func(payload []byte) error {
 						writeMu.Lock()
@@ -260,7 +249,10 @@ func (e *Engine) runServerTLSPerConn(ctx context.Context) error {
 				select {
 				case <-waitCtx.Done():
 					return sip.Message{}, waitCtx.Err()
-				case msg := <-inbox:
+				case msg, ok := <-inbox:
+					if !ok {
+						return sip.Message{}, errSIPMailboxClosed
+					}
 					return msg, nil
 				default:
 					return reader.Read(waitCtx)

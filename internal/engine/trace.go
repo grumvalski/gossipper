@@ -411,7 +411,7 @@ func (e *Engine) traceUnexpectedSIP(callNumber int, expected scenario.Command, m
 	if expected.RecvReq != "" {
 		expectedText = expected.RecvReq
 	}
-	summary := firstLine(msg.Raw)
+	summary := sipMessageOneLine(msg)
 	attrs := map[string]any{
 		"call_num":   callNumber,
 		"expected":   expectedText,
@@ -912,4 +912,29 @@ func firstLine(raw string) string {
 		return ""
 	}
 	return strings.TrimSpace(lines[0])
+}
+
+// sipMessageOneLine is a compact summary for traces when firstLine(msg.Raw) is empty
+// (e.g. pooled Message cleared elsewhere, or unusual framing) but parsed fields exist.
+func sipMessageOneLine(msg sip.Message) string {
+	if s := firstLine(msg.Raw); s != "" {
+		return s
+	}
+	if sl := strings.TrimSpace(msg.StartLine); sl != "" {
+		return sl
+	}
+	if msg.StatusCode > 0 {
+		r := strings.TrimSpace(msg.Reason)
+		if r != "" {
+			return fmt.Sprintf("SIP/2.0 %d %s", msg.StatusCode, r)
+		}
+		return fmt.Sprintf("SIP/2.0 %d", msg.StatusCode)
+	}
+	if msg.Method != "" {
+		return strings.TrimSpace(msg.Method + " " + msg.RequestURI)
+	}
+	if len(msg.Raw) > 0 {
+		return fmt.Sprintf("(non-text first line, raw_len=%d)", len(msg.Raw))
+	}
+	return "(empty message)"
 }

@@ -2,6 +2,7 @@ package sip
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -11,6 +12,12 @@ import (
 func ReadMessage(reader *bufio.Reader) (Message, error) {
 	startLine, err := reader.ReadString('\n')
 	if err != nil {
+		if errors.Is(err, io.EOF) && strings.TrimSpace(startLine) == "" {
+			return Message{}, fmt.Errorf("peer closed connection before any SIP data: %w", err)
+		}
+		if errors.Is(err, io.EOF) {
+			return Message{}, fmt.Errorf("connection closed while reading SIP start line: %w", err)
+		}
 		return Message{}, err
 	}
 	startLine = strings.TrimRight(startLine, "\r\n")
@@ -27,6 +34,9 @@ func ReadMessage(reader *bufio.Reader) (Message, error) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return Message{}, fmt.Errorf("connection closed while reading SIP headers: %w", err)
+			}
 			return Message{}, err
 		}
 		line = strings.TrimRight(line, "\r\n")
@@ -51,6 +61,9 @@ func ReadMessage(reader *bufio.Reader) (Message, error) {
 	body := make([]byte, contentLength)
 	if contentLength > 0 {
 		if _, err := io.ReadFull(reader, body); err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				return Message{}, fmt.Errorf("connection closed while reading SIP body (%d bytes): %w", contentLength, err)
+			}
 			return Message{}, err
 		}
 		builder.Write(body)

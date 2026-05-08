@@ -53,7 +53,11 @@ type Context struct {
 	// CSVFieldOverrides stores per-file, per-line, per-field in-memory overrides.
 	CSVFieldOverrides map[string]map[int]map[int]string
 	BasePath          string
+	// InjectionFile is the CLI -inf path; when set, [fieldN] without file= reads this CSV (SIPp-style).
+	InjectionFile string
 }
+
+const infDelimiterPeekBytes = 65536
 
 func (c Context) Render(raw string) string {
 	ptr := linesPool.Get().(*[]string)
@@ -240,7 +244,7 @@ func (c Context) resolveToken(token string) (string, bool, bool) {
 		value, ok := renderFileToken(key, c.BasePath)
 		return value, ok, false
 	}
-	if field, ok := renderFieldTokenWithVariables(key, c.BasePath, c.CallNumber, c.Variables, c.CSVFieldOverrides); ok {
+	if field, ok := renderFieldTokenWithVariables(key, c.BasePath, c.CallNumber, c.Variables, c.CSVFieldOverrides, c.InjectionFile); ok {
 		return field, true, false
 	}
 	if value, ok := renderFillToken(key, c.Variables); ok {
@@ -358,7 +362,7 @@ func (c Context) resolveTokenStrict(token string) (string, bool, error) {
 		return value, false, nil
 	}
 	if strings.HasPrefix(lower, "field") {
-		value, ok := renderFieldTokenWithVariables(key, c.BasePath, c.CallNumber, c.Variables, c.CSVFieldOverrides)
+		value, ok := renderFieldTokenWithVariables(key, c.BasePath, c.CallNumber, c.Variables, c.CSVFieldOverrides, c.InjectionFile)
 		if !ok {
 			return "", false, fmt.Errorf("unable to resolve field token %q", token)
 		}
@@ -684,10 +688,10 @@ func renderFileToken(key, basePath string) (string, bool) {
 }
 
 func renderFieldToken(key, basePath string, callNumber int) (string, bool) {
-	return renderFieldTokenWithVariables(key, basePath, callNumber, nil, nil)
+	return renderFieldTokenWithVariables(key, basePath, callNumber, nil, nil, "")
 }
 
-func renderFieldTokenWithVariables(key, basePath string, callNumber int, variables map[string]string, overrides map[string]map[int]map[int]string) (string, bool) {
+func renderFieldTokenWithVariables(key, basePath string, callNumber int, variables map[string]string, overrides map[string]map[int]map[int]string, defaultInjectionFile string) (string, bool) {
 	lower := strings.ToLower(key)
 	if !strings.HasPrefix(lower, "field") {
 		return "", false
@@ -703,9 +707,12 @@ func renderFieldTokenWithVariables(key, basePath string, callNumber int, variabl
 		return "", false
 	}
 	parsed := parseKeyParams(params)
-	name := parsed["file"]
+	name := strings.TrimSpace(parsed["file"])
 	if name == "" {
-		return "", false
+		name = strings.TrimSpace(defaultInjectionFile)
+		if name == "" {
+			return "", false
+		}
 	}
 	lineNumber := callNumber
 	if rawLine := parsed["line"]; rawLine != "" {
@@ -720,8 +727,12 @@ func renderFieldTokenWithVariables(key, basePath string, callNumber int, variabl
 	if err != nil || !ok {
 		return "", false
 	}
-	if fieldIndex < 0 || fieldIndex >= len(record) {
+	if fieldIndex < 0 {
 		return "", false
+	}
+	// SIPp-style: missing column on this row is an empty value, not a hard error.
+	if fieldIndex >= len(record) {
+		return "", true
 	}
 	return record[fieldIndex], true
 }
@@ -752,21 +763,53 @@ func csvRecordAt(basePath, name string, lineNumber int, overrides map[string]map
 	if lineNumber <= 0 {
 		return nil, false, nil
 	}
-	file, err := os.Open(resolvePath(basePath, name))
+	path := resolvePath(basePath, name)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, false, err
 	}
 	defer file.Close()
 
+	peek := make([]byte, infDelimiterPeekBytes)
+	n, _ := file.Read(peek)
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, false, err
+	}
+
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = -1
+	reader.Comma = sniffFieldCSVCommaFromPeek(peek[:n])
 	records, err := reader.ReadAll()
 	if err != nil || len(records) < lineNumber {
 		return nil, false, err
 	}
 	record := append([]string(nil), records[lineNumber-1]...)
-	applyCSVFieldOverrides(resolvePath(basePath, name), lineNumber, record, overrides)
+	applyCSVFieldOverrides(path, lineNumber, record, overrides)
 	return record, true, nil
+}
+
+// sniffFieldCSVCommaFromPeek chooses ',' or ';' as CSV field separator (aligned with CLI -inf sniff).
+func sniffFieldCSVCommaFromPeek(peek []byte) rune {
+	s := string(peek)
+	s = strings.TrimPrefix(s, "\ufeff")
+	for _, raw := range strings.Split(s, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		switch strings.ToUpper(line) {
+		case "SEQUENTIAL", "RANDOM", "USER":
+			continue
+		}
+		if !strings.ContainsAny(line, ",;") {
+			continue
+		}
+		if strings.Count(line, ";") > strings.Count(line, ",") {
+			return ';'
+		}
+		return ','
+	}
+	return ','
 }
 
 // ApplyCSVMutation mutates one CSV cell in memory for subsequent [fieldN ...] reads.
