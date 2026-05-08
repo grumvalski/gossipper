@@ -58,6 +58,22 @@ func TestPrepareNormalizesTLSServerTransportAlias(t *testing.T) {
 	}
 }
 
+func TestPrepareRejectsInjectionForNonUIServer(t *testing.T) {
+	t.Parallel()
+
+	cfg := cli.DefaultConfig()
+	cfg.ScenarioName = "uas"
+	cfg.Transport = "sl"
+	cfg.InjectionFile = "dummy.csv"
+	cfg.IPField = 0
+	cfg.UISourceIPs = []string{"127.0.0.2"}
+
+	_, err := Prepare(cfg)
+	if err == nil || !strings.Contains(err.Error(), "injection") {
+		t.Fatalf("expected injection rejection for non-ui server, got %v", err)
+	}
+}
+
 func TestPrepareRejectsTLSServerAliasForClientScenario(t *testing.T) {
 	t.Parallel()
 

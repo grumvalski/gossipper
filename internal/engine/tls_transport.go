@@ -12,7 +12,11 @@ import (
 )
 
 func (e *Engine) runClientSharedTLS(ctx context.Context) error {
-	localAddr := fmt.Sprintf("%s:%d", e.cfg.LocalIP, e.cfg.LocalPort)
+	bindIP := e.cfg.LocalIP
+	if len(e.cfg.UISourceIPs) > 0 {
+		bindIP = e.cfg.UISourceIPs[0]
+	}
+	localAddr := fmt.Sprintf("%s:%d", bindIP, e.cfg.LocalPort)
 	remoteAddr := fmt.Sprintf("%s:%d", e.cfg.RemoteHost, e.cfg.RemotePort)
 	tlsCfg, err := e.clientTLSConfig()
 	if err != nil {
@@ -64,7 +68,7 @@ func (e *Engine) runClientSharedTLS(ctx context.Context) error {
 				}
 			}
 			send := func(payload []byte) error { return shared.Send(payload) }
-			localIP := resolveLocalIP(shared.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(shared.LocalPort(), bindIP)
 			send = e.wrapSIPSend(callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send)
 			receive = e.wrapSIPReceive(callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, receive)
 			runErrLocal := e.executeCall(ctx, callNumber, callID, localIP, shared.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send, receive, nil)
@@ -99,14 +103,18 @@ func (e *Engine) runClientPerCallTLS(ctx context.Context) error {
 		go func(callNumber int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			dialog, err := transport.NewDialogTLS(fmt.Sprintf("%s:%d", e.cfg.LocalIP, e.cfg.LocalPort), remoteAddr, tlsCfg)
+			bindIP := e.cfg.LocalIP
+			if len(e.cfg.UISourceIPs) > 0 {
+				bindIP = e.sourceIPForCall(callNumber)
+			}
+			dialog, err := transport.NewDialogTLS(fmt.Sprintf("%s:%d", bindIP, e.cfg.LocalPort), remoteAddr, tlsCfg)
 			if err != nil {
 				once.Do(func() { runErr = err })
 				return
 			}
 			defer dialog.Close()
 			callID := newCallID(callNumber)
-			localIP := resolveLocalIP(dialog.LocalPort(), e.cfg.LocalIP)
+			localIP := resolveLocalIP(dialog.LocalPort(), bindIP)
 			send := func(payload []byte) error { return dialog.Send(payload) }
 			receive := adaptReceiveToPtr(func(waitCtx context.Context) (sip.Message, error) { return dialog.Receive(waitCtx) })
 			send = e.wrapSIPSend(callNumber, callID, localIP, dialog.LocalPort(), e.cfg.RemoteHost, e.cfg.RemotePort, send)

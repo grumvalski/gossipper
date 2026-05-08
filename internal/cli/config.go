@@ -22,6 +22,9 @@ const (
 	DefaultMaxConcurrent   = 1
 	DefaultPauseDurationMS = 1000
 	DefaultRecvTimeout     = 5 * time.Second
+
+	// Prefix of injection file used to guess comma vs semicolon (SIPp-style) delimiter.
+	infDelimiterPeekBytes = 65536
 )
 
 type Config struct {
@@ -194,8 +197,8 @@ func Parse(args []string) (Config, error) {
 	fs.StringVar(&cfg.Transport, "t", cfg.Transport, "transport: u1/un/ui, t1/tn, l1/ln; client TLS aliases cl/cln; server UDP s1/sn; server TLS sl")
 	fs.StringVar(&cfg.LocalIP, "i", cfg.LocalIP, "local IP address")
 	fs.IntVar(&cfg.LocalPort, "p", cfg.LocalPort, "local port")
-	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV injection file for ui transport source IP selection")
-	fs.IntVar(&cfg.IPField, "ip_field", cfg.IPField, "zero-based CSV field index that contains source IP for ui transport")
+	fs.StringVar(&cfg.InjectionFile, "inf", cfg.InjectionFile, "CSV injection file: source IP for ui (UDP); local bind IP for TLS client cl/cln/l1/ln")
+	fs.IntVar(&cfg.IPField, "ip_field", cfg.IPField, "zero-based CSV field index for source/bind IP (ui, or TLS client cl/cln/l1/ln)")
 	fs.IntVar(&cfg.IPField, "ipfield", cfg.IPField, "alias for -ip_field (SIPp-compatible)")
 	fs.StringVar(&cfg.AuthUsername, "au", cfg.AuthUsername, "authorization username for authentication challenges")
 	fs.StringVar(&cfg.AuthPassword, "ap", cfg.AuthPassword, "authorization password for authentication challenges")
@@ -409,7 +412,16 @@ func Parse(args []string) (Config, error) {
 		}
 		cfg.UISourceIPs = sourceIPs
 	} else if cfg.InjectionFile != "" || cfg.IPField >= 0 {
-		return Config{}, errors.New("inf and ip_field are only supported with transport ui")
+		switch cfg.Transport {
+		case "cl", "cln", "l1", "ln":
+			sourceIPs, err := loadSourceIPsFromInjection(cfg.InjectionFile, cfg.IPField)
+			if err != nil {
+				return Config{}, err
+			}
+			cfg.UISourceIPs = sourceIPs
+		default:
+			return Config{}, errors.New("inf and ip_field are only supported with transport ui or TLS client (cl/cln/l1/ln)")
+		}
 	}
 
 	if cfg.ScenarioFile == "" && cfg.ScenarioName == "" {
@@ -537,8 +549,15 @@ func loadSourceIPsFromInjection(path string, field int) ([]string, error) {
 	}
 	defer file.Close()
 
+	peek := make([]byte, infDelimiterPeekBytes)
+	n, _ := file.Read(peek)
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("unable to read inf file: %w", err)
+	}
+
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = -1
+	reader.Comma = sniffInjectionCommaFromPeek(peek[:n])
 	sourceIPs := make([]string, 0, 64)
 	for rowIndex := 0; ; rowIndex++ {
 		record, err := reader.Read()
@@ -555,11 +574,20 @@ func loadSourceIPsFromInjection(path string, field int) ([]string, error) {
 			continue
 		}
 		value := strings.TrimSpace(record[field])
+		value = strings.TrimPrefix(value, "\ufeff")
+		value = strings.TrimSpace(value)
 		if value == "" {
 			return nil, fmt.Errorf("inf file %q row %d field %d: empty source IP", path, rowIndex+1, field)
 		}
+		if isSIPpInjectionFieldKeyword(value) {
+			continue
+		}
 		if net.ParseIP(value) == nil {
-			return nil, fmt.Errorf("inf file %q row %d field %d: invalid source IP %q", path, rowIndex+1, field, value)
+			show := value
+			if len(show) > 120 {
+				show = show[:120] + "…"
+			}
+			return nil, fmt.Errorf("inf file %q row %d field %d: invalid source IP %q (set -ip_field to the column that contains the IP; SIPp-style ';' files are auto-detected)", path, rowIndex+1, field, show)
 		}
 		sourceIPs = append(sourceIPs, value)
 	}
@@ -582,6 +610,42 @@ func isIgnorableInfRow(record []string) bool {
 		}
 	}
 	return true
+}
+
+// isSIPpInjectionFieldKeyword matches SIPp -inf distribution modes that may
+// appear in the injection column instead of an IP (first line of CSV).
+func isSIPpInjectionFieldKeyword(value string) bool {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "SEQUENTIAL", "RANDOM", "USER":
+		return true
+	default:
+		return false
+	}
+}
+
+// sniffInjectionCommaFromPeek chooses ',' or ';' as CSV field separator.
+// SIPp injection files often use ';'; a single comma-separated field would
+// otherwise swallow the whole line as one cell.
+func sniffInjectionCommaFromPeek(peek []byte) rune {
+	s := string(peek)
+	s = strings.TrimPrefix(s, "\ufeff")
+	for _, raw := range strings.Split(s, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if isSIPpInjectionFieldKeyword(line) {
+			continue
+		}
+		if !strings.ContainsAny(line, ",;") {
+			continue
+		}
+		if strings.Count(line, ";") > strings.Count(line, ",") {
+			return ';'
+		}
+		return ','
+	}
+	return ','
 }
 
 func extractInfIndexArgs(args []string) ([]string, string, int, error) {

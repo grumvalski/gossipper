@@ -40,6 +40,9 @@ func Prepare(cfg cli.Config) (Prepared, error) {
 	if err := NormalizeTransport(&cfg, sc); err != nil {
 		return Prepared{}, err
 	}
+	if cfg.InjectionFile != "" && sc.Mode == scenario.ModeServer && cfg.Transport != "ui" {
+		return Prepared{}, fmt.Errorf("injection (-inf / -ip_field) is only supported for server transport ui")
+	}
 	if err := Validate3PCCRole(cfg, sc); err != nil {
 		return Prepared{}, err
 	}

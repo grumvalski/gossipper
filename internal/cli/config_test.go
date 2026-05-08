@@ -153,6 +153,58 @@ func TestParseAcceptsUITransportWithInjection(t *testing.T) {
 	}
 }
 
+func TestParseSkipsSIPpInjectionDistributionKeywords(t *testing.T) {
+	t.Parallel()
+
+	injectionPath := filepath.Join(t.TempDir(), "ips.csv")
+	content := "SEQUENTIAL\n127.0.0.2\n127.0.0.3\nrandom\n2001:db8::1\n"
+	if err := os.WriteFile(injectionPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(injection) error = %v", err)
+	}
+	cfg, err := Parse([]string{
+		"-sn", "uac",
+		"-rsa", "127.0.0.1:5060",
+		"-t", "ui",
+		"-inf", injectionPath,
+		"-ip_field", "0",
+	})
+	if err != nil {
+		t.Fatalf("Parse(ui sipp header) error = %v", err)
+	}
+	want := []string{"127.0.0.2", "127.0.0.3", "2001:db8::1"}
+	if len(cfg.UISourceIPs) != len(want) {
+		t.Fatalf("unexpected ui source IPs: %+v", cfg.UISourceIPs)
+	}
+	for i := range want {
+		if cfg.UISourceIPs[i] != want[i] {
+			t.Fatalf("ui source IPs[%d] = %q, want %q", i, cfg.UISourceIPs[i], want[i])
+		}
+	}
+}
+
+func TestParseSemicolonInjectionFile(t *testing.T) {
+	t.Parallel()
+
+	injectionPath := filepath.Join(t.TempDir(), "ips.csv")
+	content := "SEQUENTIAL\n192.168.0.10;msisdn;extra\n192.168.0.11;x;y\n"
+	if err := os.WriteFile(injectionPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(injection) error = %v", err)
+	}
+	cfg, err := Parse([]string{
+		"-sn", "uac",
+		"-rsa", "127.0.0.1:5060",
+		"-t", "ui",
+		"-inf", injectionPath,
+		"-ip_field", "0",
+	})
+	if err != nil {
+		t.Fatalf("Parse(ui semicolon inf) error = %v", err)
+	}
+	if len(cfg.UISourceIPs) != 2 || cfg.UISourceIPs[0] != "192.168.0.10" || cfg.UISourceIPs[1] != "192.168.0.11" {
+		t.Fatalf("unexpected ui source IPs: %+v", cfg.UISourceIPs)
+	}
+}
+
 func TestParseAcceptsUITransportAliasIPField(t *testing.T) {
 	t.Parallel()
 
@@ -941,7 +993,35 @@ func TestParseRejectsInfOnNonUITransport(t *testing.T) {
 		"-inf", injectionPath,
 		"-ip_field", "0",
 	}); err == nil {
-		t.Fatal("expected Parse() to reject inf/ip_field when transport is not ui")
+		t.Fatal("expected Parse() to reject inf/ip_field for transport u1")
+	}
+}
+
+func TestParseAcceptsTLSClientWithInjection(t *testing.T) {
+	t.Parallel()
+
+	injectionPath := filepath.Join(t.TempDir(), "ips.csv")
+	if err := os.WriteFile(injectionPath, []byte("127.0.0.2\n127.0.0.3\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(injection) error = %v", err)
+	}
+	for _, transport := range []string{"cl", "cln", "l1", "ln"} {
+		transport := transport
+		t.Run(transport, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := Parse([]string{
+				"-sn", "uac",
+				"-rsa", "127.0.0.1:5061",
+				"-t", transport,
+				"-inf", injectionPath,
+				"-ip_field", "0",
+			})
+			if err != nil {
+				t.Fatalf("Parse(%s) error = %v", transport, err)
+			}
+			if len(cfg.UISourceIPs) != 2 || cfg.UISourceIPs[0] != "127.0.0.2" || cfg.UISourceIPs[1] != "127.0.0.3" {
+				t.Fatalf("unexpected UISourceIPs for %s: %+v", transport, cfg.UISourceIPs)
+			}
+		})
 	}
 }
 
