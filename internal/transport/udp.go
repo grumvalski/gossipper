@@ -5,6 +5,15 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
+)
+
+const (
+	maxUDPDatagram = 65535
+	// inboundChanDepth is the depth of SharedUDP Receive channel (was 128 before widening).
+	inboundChanDepth = 512
+	udpSocketRecvBuf = 8 * 1024 * 1024
+	udpSocketSendBuf = 1024 * 1024
 )
 
 type Packet struct {
@@ -12,10 +21,14 @@ type Packet struct {
 	Addr *net.UDPAddr
 }
 
+// SharedUDP is a UDP socket shared by multiple logical SIP flows (gossipper UAC/UAS).
+// Uses the standard library listener plus a read loop (same model as transport mode "un").
 type SharedUDP struct {
-	conn      *net.UDPConn
-	incoming  chan Packet
-	closeOnce sync.Once
+	conn         *net.UDPConn
+	incoming     chan Packet
+	closeOnce    sync.Once
+	incomingOnce sync.Once
+	closed       atomic.Bool
 }
 
 func NewSharedUDP(localAddr string) (*SharedUDP, error) {
@@ -27,29 +40,55 @@ func NewSharedUDP(localAddr string) (*SharedUDP, error) {
 	if err != nil {
 		return nil, err
 	}
+	_ = conn.SetReadBuffer(udpSocketRecvBuf)
+	_ = conn.SetWriteBuffer(udpSocketSendBuf)
+
 	s := &SharedUDP{
 		conn:     conn,
-		incoming: make(chan Packet, 128),
+		incoming: make(chan Packet, inboundChanDepth),
 	}
 	go s.readLoop()
 	return s, nil
 }
 
 func (s *SharedUDP) readLoop() {
-	buffer := make([]byte, 65535)
+	buffer := make([]byte, maxUDPDatagram)
 	for {
 		n, addr, err := s.conn.ReadFromUDP(buffer)
 		if err != nil {
-			close(s.incoming)
+			s.shutdownIncoming()
 			return
+		}
+		if n <= 0 || n > maxUDPDatagram {
+			continue
+		}
+		if addr == nil {
+			continue
 		}
 		payload := make([]byte, n)
 		copy(payload, buffer[:n])
-		s.incoming <- Packet{Data: payload, Addr: addr}
+		p := Packet{Data: payload, Addr: addr}
+		select {
+		case s.incoming <- p:
+		default:
+			select {
+			case s.incoming <- p:
+			default:
+			}
+		}
 	}
 }
 
+func (s *SharedUDP) shutdownIncoming() {
+	s.incomingOnce.Do(func() {
+		close(s.incoming)
+	})
+}
+
 func (s *SharedUDP) Send(payload []byte, addr *net.UDPAddr) error {
+	if s.closed.Load() {
+		return net.ErrClosed
+	}
 	_, err := s.conn.WriteToUDP(payload, addr)
 	return err
 }
@@ -59,7 +98,7 @@ func (s *SharedUDP) Receive() <-chan Packet {
 }
 
 func (s *SharedUDP) LocalPort() int {
-	if addr, ok := s.conn.LocalAddr().(*net.UDPAddr); ok {
+	if addr, ok := s.conn.LocalAddr().(*net.UDPAddr); ok && addr != nil {
 		return addr.Port
 	}
 	return 0
@@ -68,7 +107,9 @@ func (s *SharedUDP) LocalPort() int {
 func (s *SharedUDP) Close() error {
 	var err error
 	s.closeOnce.Do(func() {
+		s.closed.Store(true)
 		err = s.conn.Close()
+		s.shutdownIncoming()
 	})
 	return err
 }
