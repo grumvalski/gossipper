@@ -4,17 +4,29 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
 
 const (
 	maxUDPDatagram = 65535
-	// inboundChanDepth is the depth of SharedUDP Receive channel (was 128 before widening).
+	// inboundChanDepth is the base depth of SharedUDP Receive channel per receiver slot (scaled below).
 	inboundChanDepth = 512
+	maxInboundChan   = 8192
 	udpSocketRecvBuf = 8 * 1024 * 1024
 	udpSocketSendBuf = 1024 * 1024
+	// maxUDPReceivers caps parallel SO_REUSEPORT listeners (kernel spreads ingress across them).
+	maxUDPReceivers = 16
+	envUDPReceivers = "GOSSIPPER_UDP_RECEIVERS"
 )
+
+// Linux tuning hints for lab/production high ingress:
+//   sysctl net.core.rmem_max, net.core.netdev_max_backlog; optionally busy polling on NIC path.
+// Parallel listeners: set GOSSIPPER_UDP_RECEIVERS to match core count (capped at maxUDPReceivers).
 
 type Packet struct {
 	Data []byte
@@ -22,39 +34,108 @@ type Packet struct {
 }
 
 // SharedUDP is a UDP socket shared by multiple logical SIP flows (gossipper UAC/UAS).
-// Uses the standard library listener plus a read loop (same model as transport mode "un").
+// On supported platforms it may use several listeners with SO_REUSEPORT and one merged Receive channel.
 type SharedUDP struct {
-	conn         *net.UDPConn
-	incoming     chan Packet
-	closeOnce    sync.Once
-	incomingOnce sync.Once
-	closed       atomic.Bool
+	conns         []*net.UDPConn
+	incoming      chan Packet
+	closeOnce     sync.Once
+	incomingOnce  sync.Once
+	closed        atomic.Bool
+	receiverCount int
 }
 
+// NewSharedUDP binds localAddr and starts ingress goroutines. Parallelism is controlled by
+// environment variable GOSSIPPER_UDP_RECEIVERS (integer): 0 or unset means auto (see effectiveReceivers).
 func NewSharedUDP(localAddr string) (*SharedUDP, error) {
+	return NewSharedUDPWithReceivers(localAddr, receiversFromEnv())
+}
+
+// NewSharedUDPWithReceivers is like NewSharedUDP but takes an explicit receiver count (0 = auto).
+// Intended for tests; production tuning uses GOSSIPPER_UDP_RECEIVERS.
+func NewSharedUDPWithReceivers(localAddr string, receivers int) (*SharedUDP, error) {
 	addr, err := net.ResolveUDPAddr("udp", localAddr)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.ListenUDP("udp", addr)
+	n := effectiveReceivers(receivers)
+	conns, err := listenParallelUDP(addr, n)
 	if err != nil {
 		return nil, err
 	}
-	_ = conn.SetReadBuffer(udpSocketRecvBuf)
-	_ = conn.SetWriteBuffer(udpSocketSendBuf)
-
+	chDepth := inboundChanDepthFor(n)
 	s := &SharedUDP{
-		conn:     conn,
-		incoming: make(chan Packet, inboundChanDepth),
+		conns:         conns,
+		incoming:      make(chan Packet, chDepth),
+		receiverCount: len(conns),
 	}
-	go s.readLoop()
+	for _, c := range conns {
+		go s.readLoop(c)
+	}
 	return s, nil
 }
 
-func (s *SharedUDP) readLoop() {
+// ReceiverCount returns how many parallel UDP listeners were started (SO_REUSEPORT fan-in).
+func (s *SharedUDP) ReceiverCount() int {
+	return s.receiverCount
+}
+
+func receiversFromEnv() int {
+	v := strings.TrimSpace(os.Getenv(envUDPReceivers))
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+func effectiveReceivers(requested int) int {
+	if requested <= 0 {
+		requested = autoReceiverCount()
+	}
+	return clampReceivers(requested)
+}
+
+func autoReceiverCount() int {
+	n := runtime.NumCPU()
+	if n < 1 {
+		n = 1
+	}
+	return clampReceivers(n)
+}
+
+func clampReceivers(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	if n > maxUDPReceivers {
+		n = maxUDPReceivers
+	}
+	return maybeSingleReceiverOS(n)
+}
+
+func inboundChanDepthFor(receivers int) int {
+	d := inboundChanDepth * receivers
+	if d > maxInboundChan {
+		d = maxInboundChan
+	}
+	if d < inboundChanDepth {
+		d = inboundChanDepth
+	}
+	return d
+}
+
+func tuneUDPConn(c *net.UDPConn) {
+	_ = c.SetReadBuffer(udpSocketRecvBuf)
+	_ = c.SetWriteBuffer(udpSocketSendBuf)
+}
+
+func (s *SharedUDP) readLoop(conn *net.UDPConn) {
 	buffer := make([]byte, maxUDPDatagram)
 	for {
-		n, addr, err := s.conn.ReadFromUDP(buffer)
+		n, addr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
 			s.shutdownIncoming()
 			return
@@ -89,7 +170,10 @@ func (s *SharedUDP) Send(payload []byte, addr *net.UDPAddr) error {
 	if s.closed.Load() {
 		return net.ErrClosed
 	}
-	_, err := s.conn.WriteToUDP(payload, addr)
+	if len(s.conns) == 0 {
+		return errors.New("transport: UDP not initialized")
+	}
+	_, err := s.conns[0].WriteToUDP(payload, addr)
 	return err
 }
 
@@ -98,7 +182,10 @@ func (s *SharedUDP) Receive() <-chan Packet {
 }
 
 func (s *SharedUDP) LocalPort() int {
-	if addr, ok := s.conn.LocalAddr().(*net.UDPAddr); ok && addr != nil {
+	if len(s.conns) == 0 {
+		return 0
+	}
+	if addr, ok := s.conns[0].LocalAddr().(*net.UDPAddr); ok && addr != nil {
 		return addr.Port
 	}
 	return 0
@@ -108,7 +195,11 @@ func (s *SharedUDP) Close() error {
 	var err error
 	s.closeOnce.Do(func() {
 		s.closed.Store(true)
-		err = s.conn.Close()
+		for _, c := range s.conns {
+			if e := c.Close(); e != nil && err == nil {
+				err = e
+			}
+		}
 		s.shutdownIncoming()
 	})
 	return err
