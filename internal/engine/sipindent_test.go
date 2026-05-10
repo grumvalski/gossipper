@@ -33,7 +33,7 @@ func TestNormalizeSIPScenarioLineIndentStripsCommonXMLPadding(t *testing.T) {
 	}
 }
 
-func TestNormalizeSIPScenarioLineIndentPreservesBody(t *testing.T) {
+func TestNormalizeSIPScenarioLineIndentAlsoDedentsBody(t *testing.T) {
 	t.Parallel()
 	raw := "    INVITE sip:a SIP/2.0\r\n" +
 		"    Content-Type: application/sdp\r\n" +
@@ -41,8 +41,8 @@ func TestNormalizeSIPScenarioLineIndentPreservesBody(t *testing.T) {
 		"\r\n" +
 		"    v=0\r\n"
 	got := normalizeSIPScenarioLineIndent(raw)
-	if !strings.HasSuffix(got, "\r\n\r\n    v=0\r\n") {
-		t.Fatalf("body should keep indentation, got %q", got)
+	if !strings.HasSuffix(got, "\r\n\r\nv=0\r\n") {
+		t.Fatalf("body should be dedented, got %q", got)
 	}
 	if !strings.HasPrefix(got, "INVITE sip:a SIP/2.0\r\n") {
 		t.Fatalf("headers should be dedented, got %q", got)

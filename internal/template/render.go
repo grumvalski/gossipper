@@ -160,6 +160,11 @@ func (c Context) renderLine(line string) (string, bool) {
 	if dropLine {
 		return "", false
 	}
+	// If the original line was non-empty but resolved to all-whitespace,
+	// drop it so that optional headers like [routes] don't leave a blank line.
+	if strings.TrimSpace(value) == "" && line != "" {
+		return "", false
+	}
 	return value, true
 }
 
@@ -233,6 +238,11 @@ func (c Context) renderLineStrict(line string) (string, bool, error) {
 		return "", false, firstErr
 	}
 	if dropLine {
+		return "", false, nil
+	}
+	// If the original line was non-empty but resolved to all-whitespace,
+	// drop it so that optional headers like [routes] don't leave a blank line.
+	if strings.TrimSpace(value) == "" && line != "" {
 		return "", false, nil
 	}
 	return value, true, nil
