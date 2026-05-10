@@ -104,6 +104,9 @@ into no-ops or empty strings.
 | `[media_ip]` | supported | Mirrors local IP for now |
 | `[media_ip_type]` | supported | Mirrors local IP type |
 | `[media_port]` | supported | Derived from local SIP port with per-call offset |
+| `[rtpstream_audio_port]` | supported | Alias for `[media_port]`; supports `+/-offset` |
+| `[auto_media_port]` | supported | Alias for `[media_port]`; supports `+/-offset` |
+| `[rtpstream_video_port]` | supported | `[media_port] + 2` (SIPp audio/video offset convention); supports `+/-offset` |
 | `[date]` | supported | Current UTC date in RFC1123 format |
 | `[timestamp]` | supported | Current local timestamp |
 | `[authentication]` | supported | Digest auth for `401`/`407` challenges with CLI credentials from `-au` / `-ap` or inline `username=` / `password=` params; supports `MD5` and `SHA-256` with `qop=auth` |

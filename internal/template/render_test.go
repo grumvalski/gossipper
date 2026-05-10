@@ -307,6 +307,36 @@ func TestRenderMessageStrictRejectsInvalidFillKeyword(t *testing.T) {
 	}
 }
 
+func TestRenderRTPStreamAudioPortAliases(t *testing.T) {
+	t.Parallel()
+
+	ctx := Context{MediaPort: 6000}
+
+	cases := map[string]string{
+		"[media_port]":             "6000",
+		"[rtpstream_audio_port]":   "6000",
+		"[auto_media_port]":        "6000",
+		"[rtpstream_video_port]":   "6002",
+		"[media_port+2]":           "6002",
+		"[rtpstream_audio_port+4]": "6004",
+		"[rtpstream_video_port+2]": "6004",
+		"[rtpstream_audio_port-1]": "5999",
+	}
+
+	for raw, want := range cases {
+		got, err := RenderMessageStrict(raw, ctx)
+		if err != nil {
+			t.Fatalf("RenderMessageStrict(%q) error = %v", raw, err)
+		}
+		if got != want {
+			t.Fatalf("RenderMessageStrict(%q) = %q, want %q", raw, got, want)
+		}
+		if got2 := RenderMessage(raw, ctx); got2 != want {
+			t.Fatalf("RenderMessage(%q) = %q, want %q", raw, got2, want)
+		}
+	}
+}
+
 // ─── Benchmarks ──────────────────────────────────────────────────────────────
 
 var benchCtx = Context{

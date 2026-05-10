@@ -286,8 +286,10 @@ func (c Context) resolveToken(token string) (string, bool, bool) {
 		return c.MediaIP, true, false
 	case "media_ip_type":
 		return c.MediaIPType, true, false
-	case "media_port":
+	case "media_port", "rtpstream_audio_port", "auto_media_port":
 		return strconv.Itoa(c.MediaPort + delta), true, false
+	case "rtpstream_video_port":
+		return strconv.Itoa(c.MediaPort + 2 + delta), true, false
 	case "call_id":
 		return c.CallID, true, false
 	case "cseq":
@@ -419,8 +421,10 @@ func (c Context) resolveTokenStrict(token string) (string, bool, error) {
 		return c.MediaIP, false, nil
 	case "media_ip_type":
 		return c.MediaIPType, false, nil
-	case "media_port":
+	case "media_port", "rtpstream_audio_port", "auto_media_port":
 		return strconv.Itoa(c.MediaPort + delta), false, nil
+	case "rtpstream_video_port":
+		return strconv.Itoa(c.MediaPort + 2 + delta), false, nil
 	case "call_id":
 		return c.CallID, false, nil
 	case "cseq":
