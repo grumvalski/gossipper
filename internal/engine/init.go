@@ -62,7 +62,10 @@ func (e *Engine) runInit(ctx context.Context) error {
 			}
 		case scenario.CommandSendCmd:
 			rawCmd := normalizeSIPScenarioLineIndent(cmd.SendText)
-			commandPayload, err := templ.RenderMessageStrict(rawCmd, renderCtx)
+			cmdRenderCtx := renderCtx
+			cmdRenderCtx.ClockTick = e.clockTick()
+			cmdRenderCtx.DynamicID = e.nextDynamicID()
+			commandPayload, err := templ.RenderMessageStrict(rawCmd, cmdRenderCtx)
 			if err != nil {
 				return err
 			}

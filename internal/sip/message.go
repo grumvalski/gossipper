@@ -193,6 +193,26 @@ func Header(headers map[string][]string, name string) (string, bool) {
 	return "", false
 }
 
+// NormalizeCallID strips an optional SIPp-style "prefix///" segment from a
+// Call-ID value so dialog correlation can match peers that use the documented
+// prefix form (RFC-compatible Call-ID can contain '/' characters; SIPp uses
+// '///' as a sentinel separator). The keyword reference is at:
+// https://sipp.readthedocs.io/en/latest/scenarios/keywords.html#call-id
+//
+// If no "///" sentinel is present the value is returned unchanged. Surrounding
+// whitespace is trimmed so headers that retain wrapping or padding compare
+// equal to bare Call-ID values.
+func NormalizeCallID(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return v
+	}
+	if i := strings.LastIndex(v, "///"); i >= 0 {
+		return v[i+3:]
+	}
+	return v
+}
+
 func Match(msg Message, request, response string) bool {
 	return MatchRecv(msg, request, response, nil)
 }

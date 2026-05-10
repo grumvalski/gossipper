@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	mrand "math/rand"
 	"net"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sipcapture/gossipper/internal/eventlog"
@@ -125,6 +127,11 @@ type Engine struct {
 	// when no calls are active and the mode matches the original scenario.
 	liveScMu     sync.RWMutex
 	liveScenario scenario.Scenario
+
+	// startTime is captured at engine construction; [clock_tick] renders milliseconds since this point.
+	startTime time.Time
+	// dynamicID is incremented per rendered SIP message; wraps at math.MaxInt32 to mirror SIPp.
+	dynamicID atomic.Int64
 }
 
 func New(cfg Config) *Engine {
@@ -142,7 +149,26 @@ func New(cfg Config) *Engine {
 		commands:     newCommandBroker(),
 		log:          log,
 		liveScenario: cfg.Scenario,
+		startTime:    time.Now(),
 	}
+}
+
+// nextDynamicID returns the next unique [dynamic_id] value with INT32 wraparound, matching SIPp.
+func (e *Engine) nextDynamicID() int64 {
+	id := e.dynamicID.Add(1)
+	if id > math.MaxInt32 {
+		e.dynamicID.Store(0)
+		return 0
+	}
+	return id
+}
+
+// clockTick returns milliseconds elapsed since engine start, matching SIPp [clock_tick] semantics.
+func (e *Engine) clockTick() int64 {
+	if e.startTime.IsZero() {
+		return 0
+	}
+	return time.Since(e.startTime).Milliseconds()
 }
 
 // snapshotLiveScenario returns the scenario used for the current and next calls.
@@ -905,6 +931,7 @@ func (e *Engine) runServerUDP(ctx context.Context) error {
 				sip.PutMessage(msg)
 				continue
 			}
+			callID = sip.NormalizeCallID(callID)
 
 			mu.Lock()
 			sess, exists := sessions[callID]
@@ -1028,6 +1055,7 @@ func (e *Engine) runServerPerSourceIP(ctx context.Context) error {
 					sip.PutMessage(msg)
 					continue
 				}
+				callID = sip.NormalizeCallID(callID)
 				ib := udpServerInbound{
 					msg:       msg,
 					callID:    callID,
@@ -1196,6 +1224,7 @@ func (e *Engine) runServerTCPShared(ctx context.Context) error {
 			if !ok {
 				continue
 			}
+			callID = sip.NormalizeCallID(callID)
 			mu.Lock()
 			sess, exists := sessions[callID]
 			if !exists {
@@ -1278,6 +1307,7 @@ func (e *Engine) runServerTCPPerConn(ctx context.Context) error {
 			if !ok {
 				return
 			}
+			callID = sip.NormalizeCallID(callID)
 			inbox := make(chan sip.Message, 8)
 			inbox <- first
 			receive := func(waitCtx context.Context) (sip.Message, error) {
@@ -1544,7 +1574,10 @@ func (e *Engine) executeCall(
 			}
 		case scenario.CommandSendCmd:
 			rawCmd := normalizeSIPScenarioLineIndent(cmd.SendText)
-			commandPayload, err := templ.RenderMessageStrict(rawCmd, renderCtx)
+			cmdRenderCtx := renderCtx
+			cmdRenderCtx.ClockTick = e.clockTick()
+			cmdRenderCtx.DynamicID = e.nextDynamicID()
+			commandPayload, err := templ.RenderMessageStrict(rawCmd, cmdRenderCtx)
 			if err != nil {
 				return err
 			}
@@ -1842,6 +1875,9 @@ func classifyCallFailure(err error, sawUnexpectedSIP bool) string {
 }
 
 func (e *Engine) waitForCommand(ctx context.Context, callID, channel, src string, timeout time.Duration) (string, commandMessage, error) {
+	if callID != "" {
+		callID = sip.NormalizeCallID(callID)
+	}
 	deadline := time.Now().Add(timeout)
 	for {
 		if callID == "" {
@@ -2071,14 +2107,14 @@ func (r *mailboxRegistry) register(callID string) chan *sip.Message {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ch := make(chan *sip.Message, sipMailboxCap)
-	r.mailboxes[callID] = ch
+	r.mailboxes[sip.NormalizeCallID(callID)] = ch
 	return ch
 }
 
 func (r *mailboxRegistry) unregister(callID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.mailboxes, callID)
+	delete(r.mailboxes, sip.NormalizeCallID(callID))
 }
 
 func (r *mailboxRegistry) dispatch(incoming <-chan transport.Packet) {
@@ -2093,6 +2129,7 @@ func (r *mailboxRegistry) dispatch(incoming <-chan transport.Packet) {
 			sip.PutMessage(msg)
 			continue
 		}
+		callID = sip.NormalizeCallID(callID)
 		r.mu.RLock()
 		ch, exists := r.mailboxes[callID]
 		r.mu.RUnlock()
@@ -2129,6 +2166,7 @@ func (r *mailboxRegistry) dispatchMessagePtr(m *sip.Message) {
 		sip.PutMessage(m)
 		return
 	}
+	callID = sip.NormalizeCallID(callID)
 	r.mu.RLock()
 	ch, exists := r.mailboxes[callID]
 	r.mu.RUnlock()
@@ -3063,7 +3101,7 @@ func commandCallID(raw, fallback string) string {
 	if !ok || len(values) == 0 || strings.TrimSpace(values[0]) == "" {
 		return fallback
 	}
-	return strings.TrimSpace(values[0])
+	return sip.NormalizeCallID(values[0])
 }
 
 func commandSender(raw, fallback string) string {

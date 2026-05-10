@@ -4,6 +4,36 @@ import (
 	"testing"
 )
 
+func TestNormalizeCallID(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: "", want: ""},
+		{name: "whitespace_only", in: "   ", want: ""},
+		{name: "plain", in: "abc", want: "abc"},
+		{name: "trims_whitespace", in: "  abc  ", want: "abc"},
+		{name: "single_slash_passthrough", in: "abc/def", want: "abc/def"},
+		{name: "double_slash_passthrough", in: "abc//def", want: "abc//def"},
+		{name: "sipp_prefix_form", in: "ABCDEFGHIJ///[call_id]", want: "[call_id]"},
+		{name: "real_world_prefix", in: "myprefix///dialog123", want: "dialog123"},
+		{name: "multiple_triple_slashes_take_last", in: "x///y///z", want: "z"},
+		{name: "leading_triple_slash", in: "///rest", want: "rest"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := NormalizeCallID(tc.in); got != tc.want {
+				t.Fatalf("NormalizeCallID(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseRequestAndCallID(t *testing.T) {
 	t.Parallel()
 

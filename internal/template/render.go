@@ -265,6 +265,9 @@ func (c Context) resolveToken(token string) (string, bool, bool) {
 		if strings.EqualFold(header, "message") {
 			return c.LastMessage, true, false
 		}
+		if strings.EqualFold(header, "Request_URI") {
+			return extractLastRequestURI(c.LastMessage, c.LastHeaders), true, false
+		}
 		includeName := strings.HasSuffix(header, ":")
 		header = strings.TrimSuffix(header, ":")
 		values, ok := lookupHeader(c.LastHeaders, header)
@@ -278,6 +281,11 @@ func (c Context) resolveToken(token string) (string, bool, bool) {
 	switch strings.ToLower(base) {
 	case "service":
 		return c.Service, true, false
+	case "server_ip":
+		if c.ServerIP != "" {
+			return c.ServerIP, true, false
+		}
+		return c.LocalIP, true, false
 	case "remote_host":
 		return c.RemoteHost, true, false
 	case "remote_ip":
@@ -310,6 +318,12 @@ func (c Context) resolveToken(token string) (string, bool, bool) {
 		return strconv.Itoa(c.MessageIndex), true, false
 	case "pid":
 		return strconv.Itoa(c.PID), true, false
+	case "users":
+		return strconv.Itoa(c.Users), true, false
+	case "userid":
+		return strconv.Itoa(c.UserID), true, false
+	case "tdmmap":
+		return "0.0.0/0", true, false
 	case "branch":
 		if delta == 0 {
 			return c.BranchBase, true, false
@@ -322,7 +336,7 @@ func (c Context) resolveToken(token string) (string, bool, bool) {
 	case "timestamp":
 		return time.Now().Format("2006-01-02 15:04:05"), true, false
 	case "date":
-		return time.Now().UTC().Format(time.RFC1123), true, false
+		return time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"), true, false
 	case "sipp_version":
 		if strings.TrimSpace(c.SIPpVersion) == "" {
 			return "Gossipper", true, false
@@ -449,6 +463,8 @@ func (c Context) resolveTokenStrict(token string) (string, bool, error) {
 		return strconv.Itoa(c.Users), false, nil
 	case "userid":
 		return strconv.Itoa(c.UserID), false, nil
+	case "tdmmap":
+		return "0.0.0/0", false, nil
 	case "branch":
 		if delta == 0 {
 			return c.BranchBase, false, nil
@@ -461,7 +477,7 @@ func (c Context) resolveTokenStrict(token string) (string, bool, error) {
 	case "timestamp":
 		return time.Now().Format("2006-01-02 15:04:05"), false, nil
 	case "date":
-		return time.Now().UTC().Format(time.RFC1123), false, nil
+		return time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"), false, nil
 	case "sipp_version":
 		if strings.TrimSpace(c.SIPpVersion) == "" {
 			return "Gossipper", false, nil

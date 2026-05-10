@@ -87,7 +87,7 @@ into no-ops or empty strings.
 | `[local_ip_type]` | supported | `4` or `6` |
 | `[local_port]` | supported | Supports `+/-offset` |
 | `[transport]` | supported | Renders `UDP`, `TCP`, or `TLS` depending on transport; `ui` explicitly renders as `UDP` |
-| `[call_id]` | supported | Generated per call; in command-only/external 3PCC flows it is adopted from the first incoming `recvCmd` correlation message when needed |
+| `[call_id]` | supported | Generated per call; in command-only/external 3PCC flows it is adopted from the first incoming `recvCmd` correlation message when needed; SIPp-style `prefix///[call_id]` form is recognized for dialog correlation (the `prefix///` segment is stripped at matching/keying sites) |
 | `[cseq]` | supported | Basic numeric rendering with offsets |
 | `[branch]` | supported | Deterministic per message |
 | `[len]` | supported | Two-pass body length calculation |
@@ -107,7 +107,7 @@ into no-ops or empty strings.
 | `[rtpstream_audio_port]` | supported | Alias for `[media_port]`; supports `+/-offset` |
 | `[auto_media_port]` | supported | Alias for `[media_port]`; supports `+/-offset` |
 | `[rtpstream_video_port]` | supported | `[media_port] + 2` (SIPp audio/video offset convention); supports `+/-offset` |
-| `[date]` | supported | Current UTC date in RFC1123 format |
+| `[date]` | supported | Current UTC date in RFC2822 form with literal `GMT` zone (matches SIPp output) |
 | `[timestamp]` | supported | Current local timestamp |
 | `[authentication]` | supported | Digest auth for `401`/`407` challenges with CLI credentials from `-au` / `-ap` or inline `username=` / `password=` params; supports `MD5` and `SHA-256` with `qop=auth` |
 | `[fieldN ...]` | partial | CSV injection with `file=` and optional `line=`; variable-driven form currently uses `line=$var`, and line numbers are physical 1-based CSV rows |
@@ -115,12 +115,12 @@ into no-ops or empty strings.
 | `[users]` | supported | Number of configured logical users from `-users` |
 | `[userid]` | supported | Zero-based logical user identifier for the current call |
 | `[$n]` / `[$name]` | supported | Action and string variables |
-| `[dynamic_id]` | partial | Pragmatic M6 support renders a deterministic per-message helper value from runtime context; full SIPp wraparound/global semantics remain deferred |
-| `[routes]` | partial | Pragmatic M6 support: when a `recv` command uses `rrs="true"`, captured `Record-Route` headers are replayed as `Route` headers (reverse order) in subsequent rendered messages |
-| `[clock_tick]` | partial | Pragmatic M6 support renders runtime-provided tick values (supports arithmetic offsets) |
+| `[dynamic_id]` | supported | Atomic per-message counter with `INT32` wraparound to mirror SIPp; supports `+/-offset` |
+| `[routes]` | supported | When a `recv` command uses `rrs="true"`, captured `Record-Route` headers are replayed as `Route` headers (reverse order) in subsequent rendered messages |
+| `[clock_tick]` | supported | Milliseconds elapsed since engine start; supports `+/-offset` |
 | `[sipp_version]` | supported | Renders runtime version string (defaults to `Gossipper` when not explicitly provided) |
-| `[tdmmap]` | deferred | Not implemented yet |
-| `[fill]` | partial | Pragmatic M6 support for `variable=` length and optional `text=` seed in message templating; broader SIPp edge semantics remain deferred |
+| `[tdmmap]` | partial | Stub: renders `0.0.0/0`; `-tdmmap` CLI flag is not parsed and per-call slot allocation is deferred |
+| `[fill]` | supported | `variable=N` length and optional `text="..."` seed; matches SIPp behavior |
 
 ## Transport modes
 

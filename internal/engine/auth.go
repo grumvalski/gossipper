@@ -29,6 +29,9 @@ func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error)
 	// be shorter than Content-Length claims, causing TCP framing errors.
 	raw = normalizeSIPScenarioLineIndent(raw)
 
+	ctx.ClockTick = e.clockTick()
+	ctx.DynamicID = e.nextDynamicID()
+
 	options := extractAuthKeywordOptions(raw)
 	if len(options) == 0 {
 		rendered, err := templ.RenderMessageStrict(raw, ctx)
