@@ -142,3 +142,28 @@ func TestRenderFieldBeyondRowWidthReturnsEmpty(t *testing.T) {
 		t.Fatalf("field1: got %q want empty", got1)
 	}
 }
+
+func TestRenderFieldDefaultInjectionFileIsRelativeToCWDNotScenarioDir(t *testing.T) {
+// The -inf CSV is relative to the process CWD; the scenario XML may be in a
+// subdirectory, making BasePath a sub-path like "./scenarios".  Field tokens
+// must still resolve the injection file from CWD, not from BasePath.
+csvDir := t.TempDir()
+scenarioDir := t.TempDir() // simulates "./scenarios" — a different directory
+csvPath := filepath.Join(csvDir, "data.csv")
+if err := os.WriteFile(csvPath, []byte("SEQUENTIAL\nhello;world\n"), 0o644); err != nil {
+t.Fatal(err)
+}
+ctx := Context{
+BasePath:          scenarioDir, // scenario lives in a subdirectory
+CallNumber:        1,
+InjectionFile:     csvPath, // -inf is absolute (or relative to CWD)
+CSVFieldOverrides: make(map[string]map[int]map[int]string),
+}
+got, err := ctx.RenderStrict("[field0]")
+if err != nil {
+t.Fatalf("[field0] with BasePath != csvDir: %v", err)
+}
+if got != "hello" {
+t.Fatalf("field0: got %q want hello", got)
+}
+}

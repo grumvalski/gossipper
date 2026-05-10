@@ -708,11 +708,17 @@ func renderFieldTokenWithVariables(key, basePath string, callNumber int, variabl
 	}
 	parsed := parseKeyParams(params)
 	name := strings.TrimSpace(parsed["file"])
+	// csvBasePath is the directory used to resolve the CSV file.
+	// Files named inline (file=) are relative to the scenario directory (basePath).
+	// The default injection file (-inf) is specified relative to the CWD, so use
+	// an empty base so resolvePath does not prepend the scenario directory.
+	csvBasePath := basePath
 	if name == "" {
 		name = strings.TrimSpace(defaultInjectionFile)
 		if name == "" {
 			return "", false
 		}
+		csvBasePath = ""
 	}
 	lineNumber := callNumber
 	explicitPhysicalLine := false
@@ -725,7 +731,7 @@ func renderFieldTokenWithVariables(key, basePath string, callNumber int, variabl
 		explicitPhysicalLine = true
 	}
 
-	record, ok, err := csvRecordAt(basePath, name, lineNumber, overrides, explicitPhysicalLine)
+	record, ok, err := csvRecordAt(csvBasePath, name, lineNumber, overrides, explicitPhysicalLine)
 	if err != nil || !ok {
 		return "", false
 	}
