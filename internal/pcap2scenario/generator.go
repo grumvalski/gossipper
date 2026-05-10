@@ -481,17 +481,6 @@ func hasBody(raw string) bool {
 	return false
 }
 
-// indent prefixes every non-empty line with the given padding string.
-func indent(s, pad string) string {
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		if l != "" {
-			lines[i] = pad + l
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 // xmlEscape replaces the minimal set of characters that must be escaped in
 // XML attribute values and text content.
 func xmlEscape(s string) string {

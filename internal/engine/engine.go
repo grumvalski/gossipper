@@ -1543,7 +1543,8 @@ func (e *Engine) executeCall(
 				inviteStartedAt = time.Now()
 			}
 		case scenario.CommandSendCmd:
-			commandPayload, err := templ.RenderMessageStrict(cmd.SendText, renderCtx)
+			rawCmd := normalizeSIPScenarioLineIndent(cmd.SendText)
+			commandPayload, err := templ.RenderMessageStrict(rawCmd, renderCtx)
 			if err != nil {
 				return err
 			}
