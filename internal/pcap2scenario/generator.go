@@ -47,8 +47,8 @@ func buildUAC(dlg Dialog, rtpFile, pcapName string) string {
 		// 1. Send first INVITE (without credentials)
 		sb.WriteString("  <send retrans=\"500\">\n")
 		sb.WriteString("    <![CDATA[\n")
-		sb.WriteString(indent(invite, "    "))
-		sb.WriteString("\n    ]]>\n  </send>\n\n")
+		sb.WriteString(invite)
+		sb.WriteString("\n]]>\n  </send>\n\n")
 
 		// 2. Receive the challenge
 		fmt.Fprintf(&sb, "  <recv response=\"%d\"/>\n\n", dlg.AuthChallengeCode)
@@ -60,21 +60,21 @@ func buildUAC(dlg Dialog, rtpFile, pcapName string) string {
 		}
 		sb.WriteString("  <send>\n")
 		sb.WriteString("    <![CDATA[\n")
-		sb.WriteString(indent(ackTo4xx, "    "))
-		sb.WriteString("\n    ]]>\n  </send>\n\n")
+		sb.WriteString(ackTo4xx)
+		sb.WriteString("\n]]>\n  </send>\n\n")
 
 		// 4. Send second INVITE with [authentication]
 		authInvite := buildAuthINVITE(dlg)
 		sb.WriteString("  <send retrans=\"500\">\n")
 		sb.WriteString("    <![CDATA[\n")
-		sb.WriteString(indent(authInvite, "    "))
-		sb.WriteString("\n    ]]>\n  </send>\n\n")
+		sb.WriteString(authInvite)
+		sb.WriteString("\n]]>\n  </send>\n\n")
 	} else {
 		// ── Normal flow (no auth challenge) ──────────────────────────────
 		sb.WriteString("  <send retrans=\"500\">\n")
 		sb.WriteString("    <![CDATA[\n")
-		sb.WriteString(indent(invite, "    "))
-		sb.WriteString("\n    ]]>\n  </send>\n\n")
+		sb.WriteString(invite)
+		sb.WriteString("\n]]>\n  </send>\n\n")
 	}
 
 	// Receive 100 / 180 (optional) then 200 OK — start RTP
@@ -89,8 +89,8 @@ func buildUAC(dlg Dialog, rtpFile, pcapName string) string {
 	// Send ACK to 200 OK
 	sb.WriteString("  <send>\n")
 	sb.WriteString("    <![CDATA[\n")
-	sb.WriteString(indent(ack, "    "))
-	sb.WriteString("\n    ]]>\n  </send>\n\n")
+	sb.WriteString(ack)
+	sb.WriteString("\n]]>\n  </send>\n\n")
 
 	// Hold the call for its original duration
 	fmt.Fprintf(&sb, "  <pause milliseconds=\"%d\"/>\n\n", durationMS)
@@ -106,8 +106,8 @@ func buildUAC(dlg Dialog, rtpFile, pcapName string) string {
 	if dlg.BYE.Message.Method != "" {
 		sb.WriteString("  <send retrans=\"500\">\n")
 		sb.WriteString("    <![CDATA[\n")
-		sb.WriteString(indent(bye, "    "))
-		sb.WriteString("\n    ]]>\n  </send>\n\n")
+		sb.WriteString(bye)
+		sb.WriteString("\n]]>\n  </send>\n\n")
 		sb.WriteString("  <recv response=\"200\"/>\n\n")
 	}
 
@@ -135,33 +135,33 @@ func buildUAS(dlg Dialog, rtpFile, pcapName string) string {
 	// 180 Ringing
 	sb.WriteString("  <send>\n")
 	sb.WriteString("    <![CDATA[\n")
-	sb.WriteString("    SIP/2.0 180 Ringing\n")
-	sb.WriteString("    [last_Via:]\n")
-	sb.WriteString("    [last_From:]\n")
-	sb.WriteString("    [last_To:];tag=[pid]GossipTag01[call_number]\n")
-	sb.WriteString("    [last_Call-ID:]\n")
-	sb.WriteString("    [last_CSeq:]\n")
-	sb.WriteString("    Contact: <sip:[local_ip]:[local_port];transport=[transport]>\n")
-	sb.WriteString("    Content-Length: 0\n")
-	sb.WriteString("\n    ]]>\n  </send>\n\n")
+	sb.WriteString("SIP/2.0 180 Ringing\n")
+	sb.WriteString("[last_Via:]\n")
+	sb.WriteString("[last_From:]\n")
+	sb.WriteString("[last_To:];tag=[pid]GossipTag01[call_number]\n")
+	sb.WriteString("[last_Call-ID:]\n")
+	sb.WriteString("[last_CSeq:]\n")
+	sb.WriteString("Contact: <sip:[local_ip]:[local_port];transport=[transport]>\n")
+	sb.WriteString("Content-Length: 0\n")
+	sb.WriteString("\n]]>\n  </send>\n\n")
 
 	// 200 OK with SDP
 	sb.WriteString("  <send retrans=\"500\">\n")
 	sb.WriteString("    <![CDATA[\n")
-	sb.WriteString("    SIP/2.0 200 OK\n")
-	sb.WriteString("    [last_Via:]\n")
-	sb.WriteString("    [last_From:]\n")
-	sb.WriteString("    [last_To:];tag=[pid]GossipTag01[call_number]\n")
-	sb.WriteString("    [last_Call-ID:]\n")
-	sb.WriteString("    [last_CSeq:]\n")
-	sb.WriteString("    Contact: <sip:[local_ip]:[local_port];transport=[transport]>\n")
-	sb.WriteString("    Content-Type: application/sdp\n")
-	sb.WriteString("    Content-Length: [len]\n")
+	sb.WriteString("SIP/2.0 200 OK\n")
+	sb.WriteString("[last_Via:]\n")
+	sb.WriteString("[last_From:]\n")
+	sb.WriteString("[last_To:];tag=[pid]GossipTag01[call_number]\n")
+	sb.WriteString("[last_Call-ID:]\n")
+	sb.WriteString("[last_CSeq:]\n")
+	sb.WriteString("Contact: <sip:[local_ip]:[local_port];transport=[transport]>\n")
+	sb.WriteString("Content-Type: application/sdp\n")
+	sb.WriteString("Content-Length: [len]\n")
 	sb.WriteString("\n")
 	for _, sdpLine := range strings.Split(sdpBody, "\n") {
-		fmt.Fprintf(&sb, "    %s\n", sdpLine)
+		fmt.Fprintf(&sb, "%s\n", sdpLine)
 	}
-	sb.WriteString("\n    ]]>\n  </send>\n\n")
+	sb.WriteString("\n]]>\n  </send>\n\n")
 
 	// Receive ACK — start playing RTP immediately
 	sb.WriteString("  <recv request=\"ACK\">\n")
@@ -185,14 +185,14 @@ func buildUAS(dlg Dialog, rtpFile, pcapName string) string {
 
 	sb.WriteString("  <send>\n")
 	sb.WriteString("    <![CDATA[\n")
-	sb.WriteString("    SIP/2.0 200 OK\n")
-	sb.WriteString("    [last_Via:]\n")
-	sb.WriteString("    [last_From:]\n")
-	sb.WriteString("    [last_To:];tag=[pid]GossipTag01[call_number]\n")
-	sb.WriteString("    [last_Call-ID:]\n")
-	sb.WriteString("    [last_CSeq:]\n")
-	sb.WriteString("    Content-Length: 0\n")
-	sb.WriteString("\n    ]]>\n  </send>\n\n")
+	sb.WriteString("SIP/2.0 200 OK\n")
+	sb.WriteString("[last_Via:]\n")
+	sb.WriteString("[last_From:]\n")
+	sb.WriteString("[last_To:];tag=[pid]GossipTag01[call_number]\n")
+	sb.WriteString("[last_Call-ID:]\n")
+	sb.WriteString("[last_CSeq:]\n")
+	sb.WriteString("Content-Length: 0\n")
+	sb.WriteString("\n]]>\n  </send>\n\n")
 
 	sb.WriteString("</scenario>\n")
 	return sb.String()

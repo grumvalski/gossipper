@@ -2206,9 +2206,10 @@ func randomBranch(callNumber, messageIndex int) string {
 	return fmt.Sprintf("z9hG4bK-gossip-%d-%d", callNumber, messageIndex)
 }
 
-// normalizeSIPScenarioLineIndent strips a common leading space/tab prefix from each
-// line in the SIP headers (before the first blank line), matching typical SIPp/XML
-// CDATA indentation so Via/From are not sent with leading spaces.
+// normalizeSIPScenarioLineIndent strips a common leading space/tab prefix from
+// every line in the message (both SIP headers and body), matching typical
+// SIPp/XML CDATA indentation so headers and SDP body are not sent with leading
+// spaces.
 func normalizeSIPScenarioLineIndent(msg string) string {
 	if msg == "" {
 		return msg
@@ -2224,20 +2225,27 @@ func normalizeSIPScenarioLineIndent(msg string) string {
 	} else {
 		head = msg
 	}
-	head = dedentSIPHeaderLines(head)
+	head, minStripped := dedentSIPHeaderLines(head)
 	if foundSep {
+		if minStripped > 0 {
+			body = dedentLines(body, minStripped)
+		}
 		return head + sep + body
 	}
 	return head
 }
 
-func dedentSIPHeaderLines(head string) string {
+// dedentSIPHeaderLines removes the common leading whitespace indent from SIP
+// header lines and returns the dedented string together with the number of
+// characters that were stripped per line.
+func dedentSIPHeaderLines(head string) (string, int) {
 	if head == "" {
-		return head
+		return head, 0
 	}
 	lines := strings.Split(head, "\r\n")
-	// If the start line (request or status) is flush-left but following header lines
-	// are XML-indented, global min would be 0 and nothing would strip — handle that.
+	// If the start line (request or status) is flush-left but following header
+	// lines are XML-indented, global min would be 0 and nothing would strip —
+	// handle that by skipping the first line when computing the minimum.
 	skipFirstForMin := false
 	if len(lines) > 0 {
 		first := lines[0]
@@ -2259,7 +2267,7 @@ func dedentSIPHeaderLines(head string) string {
 		}
 	}
 	if min <= 0 {
-		return head
+		return head, 0
 	}
 	for i := range lines {
 		line := lines[i]
@@ -2270,6 +2278,27 @@ func dedentSIPHeaderLines(head string) string {
 		if n >= min {
 			lines[i] = line[min:]
 		}
+	}
+	return strings.Join(lines, "\r\n"), min
+}
+
+// dedentLines removes up to n leading space/tab characters from each non-blank
+// line in s (which uses \r\n line endings).
+func dedentLines(s string, n int) string {
+	if s == "" || n <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\r\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		leading := countLeadingSpaceTab(line)
+		strip := n
+		if leading < strip {
+			strip = leading
+		}
+		lines[i] = line[strip:]
 	}
 	return strings.Join(lines, "\r\n")
 }
@@ -2287,13 +2316,20 @@ func countLeadingSpaceTab(s string) int {
 }
 
 func ensureMessageTerminator(msg string) string {
-	if len(msg) >= 4 && msg[len(msg)-4:] == "\r\n\r\n" {
+	if strings.HasSuffix(msg, "\r\n\r\n") {
 		return msg
 	}
-	if strings.Contains(msg, "\r\n\r\n") {
-		return msg
+	hasBody := strings.Contains(msg, "\r\n\r\n")
+	if strings.HasSuffix(msg, "\r\n") {
+		if hasBody {
+			// Body already ends with \r\n — correct.
+			return msg
+		}
+		// No body: headers end with a single \r\n, need one more to close them.
+		return msg + "\r\n"
 	}
-	if len(msg) >= 2 && msg[len(msg)-2:] == "\r\n" {
+	if hasBody {
+		// Body is missing its trailing \r\n.
 		return msg + "\r\n"
 	}
 	return msg + "\r\n\r\n"

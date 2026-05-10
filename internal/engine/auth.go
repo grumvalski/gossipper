@@ -23,13 +23,19 @@ type authKeywordOptions struct {
 }
 
 func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error) {
+	// Strip XML/CDATA indentation before rendering so that [len] is computed
+	// from the dedented body, producing the correct Content-Length value.
+	// If [len] were computed first and dedenting happened after, the body would
+	// be shorter than Content-Length claims, causing TCP framing errors.
+	raw = normalizeSIPScenarioLineIndent(raw)
+
 	options := extractAuthKeywordOptions(raw)
 	if len(options) == 0 {
 		rendered, err := templ.RenderMessageStrict(raw, ctx)
 		if err != nil {
 			return "", err
 		}
-		return ensureMessageTerminator(normalizeSIPScenarioLineIndent(rendered)), nil
+		return ensureMessageTerminator(rendered), nil
 	}
 
 	provisionalCtx := ctx
@@ -42,7 +48,6 @@ func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error)
 	if err != nil {
 		return "", err
 	}
-	provisional = normalizeSIPScenarioLineIndent(provisional)
 	provisional = ensureMessageTerminator(provisional)
 
 	finalCtx := ctx
@@ -58,7 +63,7 @@ func (e *Engine) renderSIPMessage(raw string, ctx templ.Context) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return ensureMessageTerminator(normalizeSIPScenarioLineIndent(rendered)), nil
+	return ensureMessageTerminator(rendered), nil
 }
 
 func (e *Engine) buildAuthHeader(outgoing string, ctx templ.Context, option authKeywordOptions) (string, error) {
