@@ -52,6 +52,8 @@ type runSpec struct {
 	LogOTELEndpoint  *string  `json:"log_otel_endpoint,omitempty"`
 	LogOTELProto     *string  `json:"log_otel_proto,omitempty"`
 	LogOTELInsecure  *bool    `json:"log_otel_insecure,omitempty"`
+	ApiAddr          *string  `json:"api_addr,omitempty"`
+	ApiToken         *string  `json:"api_token,omitempty"`
 	ExtraArgs        []string `json:"extra_args,omitempty"`
 }
 
@@ -250,6 +252,12 @@ func applyRunSpec(cfg *Config, spec *runSpec, configDir string) error {
 	}
 	if spec.LogOTELInsecure != nil {
 		cfg.LogOTELInsecure = *spec.LogOTELInsecure
+	}
+	if spec.ApiAddr != nil {
+		cfg.ApiAddr = strings.TrimSpace(*spec.ApiAddr)
+	}
+	if spec.ApiToken != nil {
+		cfg.ApiToken = *spec.ApiToken
 	}
 	return nil
 }

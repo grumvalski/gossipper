@@ -10,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sipcapture/gossipper/internal/api"
 	"github.com/sipcapture/gossipper/internal/cli"
 	"github.com/sipcapture/gossipper/internal/engine"
+	"github.com/sipcapture/gossipper/internal/scenario"
 )
 
 // RunSIPScenario runs the SIP scenario engine (UAC/UAS or XML) until ctx is cancelled or the scenario completes.
@@ -36,6 +38,22 @@ func RunSIPScenario(ctx context.Context, cfg cli.Config) error {
 	defer cancelRun()
 
 	app := engine.New(prepared.EngineConfig)
+	if prepared.CLIConfig.ApiAddr != "" {
+		apSrv := api.New(api.ServerConfig{
+			Engine: app,
+			CLI:    prepared.CLIConfig,
+			Token:  prepared.CLIConfig.ApiToken,
+			ValidateScenario: func(sc scenario.Scenario) error {
+				return ValidateScenario(prepared.CLIConfig, sc)
+			},
+		})
+		go func() {
+			fmt.Fprintf(os.Stderr, "api: listening on http://%s/api/v1/health\n", prepared.CLIConfig.ApiAddr)
+			if err := api.StartListenAndServe(runCtx, prepared.CLIConfig.ApiAddr, apSrv.Handler()); err != nil {
+				fmt.Fprintf(os.Stderr, "api: %v\n", err)
+			}
+		}()
+	}
 	screenDumpSignals := make(chan os.Signal, 1)
 	signal.Notify(screenDumpSignals, syscall.SIGUSR1)
 	defer signal.Stop(screenDumpSignals)

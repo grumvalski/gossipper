@@ -42,6 +42,7 @@ The current MVP implements:
 - Pragmatic RTP activity checks via `exec rtpcheck="..."` with configurable `min_packets`, `timeout_ms`, and `direction=any|send|recv|both` (legacy `bidirectional` alias is also supported)
 - RTP echo helper mode via `exec rtp_stream="echo"`
 - Periodic RTCP sender reports plus basic incoming RTCP counters via `pion/rtcp`
+- Optional HTTP API (`-api_addr`, optional `-api_token`) for `/api/v1/stats`, scenario XML (`GET`/`PUT` with `-sf`), `POST /api/v1/scenario/apply`, and `GET`/`POST /api/v1/control` (rate / pause)
 
 ## Project layout
 
@@ -53,7 +54,7 @@ The current MVP implements:
 - `internal/template`: SIPp keyword rendering
 - `internal/sip`: SIP message parsing helpers
 - `internal/transport`: UDP, TCP, and TLS transports
-- `internal/engine`: scenario execution engine
+- `internal/api`: optional HTTP management API (`-api_addr`) for live stats, scenario file read/write, hot apply, and rate/pause control
 - `internal/scheduler`: timing abstraction
 - `internal/stats`: counters and summaries
 - `internal/media`: RTP helpers backed by Pion

@@ -119,6 +119,12 @@ type Engine struct {
 	trace    *traceLogger
 	hep      *hep.Client
 	log      eventlog.Logger
+
+	// liveScenario is the SIP scenario executed by new and running calls (executeCall).
+	// It starts as a copy of cfg.Scenario and can be replaced at runtime via TryReplaceLiveScenario
+	// when no calls are active and the mode matches the original scenario.
+	liveScMu     sync.RWMutex
+	liveScenario scenario.Scenario
 }
 
 func New(cfg Config) *Engine {
@@ -127,15 +133,45 @@ func New(cfg Config) *Engine {
 		log = eventlog.Noop()
 	}
 	return &Engine{
-		cfg:      cfg,
-		sched:    scheduler.New(),
-		rate:     scheduler.NewRateController(cfg.Rate),
-		stats:    stats.New(),
-		random:   mrand.New(mrand.NewSource(time.Now().UnixNano())),
-		scopes:   newScopedVars(),
-		commands: newCommandBroker(),
-		log:      log,
+		cfg:          cfg,
+		sched:        scheduler.New(),
+		rate:         scheduler.NewRateController(cfg.Rate),
+		stats:        stats.New(),
+		random:       mrand.New(mrand.NewSource(time.Now().UnixNano())),
+		scopes:       newScopedVars(),
+		commands:     newCommandBroker(),
+		log:          log,
+		liveScenario: cfg.Scenario,
 	}
+}
+
+// snapshotLiveScenario returns the scenario used for the current and next calls.
+func (e *Engine) snapshotLiveScenario() scenario.Scenario {
+	e.liveScMu.RLock()
+	defer e.liveScMu.RUnlock()
+	return e.liveScenario
+}
+
+// TryReplaceLiveScenario swaps the live SIP scenario for subsequent calls.
+// Init commands are not re-run; trace count specs stay based on the original scenario.
+// It fails if any call is active or if the new scenario mode differs from the startup scenario.
+func (e *Engine) TryReplaceLiveScenario(next scenario.Scenario) error {
+	if next.Mode != e.cfg.Scenario.Mode {
+		return fmt.Errorf("scenario mode %q does not match startup mode %q (restart required)", next.Mode, e.cfg.Scenario.Mode)
+	}
+	snap := e.Stats().Snapshot()
+	if snap.ActiveCalls > 0 {
+		return fmt.Errorf("cannot replace scenario while %d calls are active", snap.ActiveCalls)
+	}
+	e.liveScMu.Lock()
+	defer e.liveScMu.Unlock()
+	e.liveScenario = next
+	return nil
+}
+
+// LiveScenario returns the SIP scenario used for current and new calls (after optional hot reload).
+func (e *Engine) LiveScenario() scenario.Scenario {
+	return e.snapshotLiveScenario()
 }
 
 func (e *Engine) Stats() *stats.Collector {
@@ -1351,6 +1387,7 @@ func (e *Engine) executeCall(
 		})
 	}()
 
+	scen := e.snapshotLiveScenario()
 	renderCtx := templ.Context{
 		Service:     e.cfg.Service,
 		Transport:   e.cfg.Transport,
@@ -1372,7 +1409,7 @@ func (e *Engine) executeCall(
 			"routes": "",
 		},
 		CSVFieldOverrides: make(map[string]map[int]map[int]string),
-		BasePath:          e.cfg.Scenario.BasePath,
+		BasePath:          scen.BasePath,
 		InjectionFile:     e.cfg.InjectionFile,
 	}
 	currentRemoteHost := remoteHost
@@ -1392,7 +1429,7 @@ func (e *Engine) executeCall(
 	renderCtx.Users = e.cfg.Users
 	renderCtx.UserID = currentUserID
 	renderCtx.ServerIP = localIP
-	store := newVarStore(e.scopes, e.cfg.Scenario.GlobalVariables, e.cfg.Scenario.UserVariables, currentUserID)
+	store := newVarStore(e.scopes, scen.GlobalVariables, scen.UserVariables, currentUserID)
 	renderCtx.Variables = store.Snapshot()
 	finishRTD := func(name string) {
 		name = strings.TrimSpace(name)
@@ -1443,8 +1480,8 @@ func (e *Engine) executeCall(
 		return nil
 	}
 
-	for index := 0; index < len(e.cfg.Scenario.Commands); {
-		cmd := e.cfg.Scenario.Commands[index]
+	for index := 0; index < len(scen.Commands); {
+		cmd := scen.Commands[index]
 
 		renderCtx.Variables = store.Snapshot()
 		if !shouldExecute(cmd, store) {
@@ -1534,7 +1571,7 @@ func (e *Engine) executeCall(
 				return msg, false, err
 			}
 			unexpMainIndex := -1
-			if idx, ok := e.cfg.Scenario.Labels["_unexp.main"]; ok {
+			if idx, ok := scen.Labels["_unexp.main"]; ok {
 				unexpMainIndex = idx
 			}
 			var unexpectedForMain *sip.Message
