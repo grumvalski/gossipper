@@ -1625,9 +1625,13 @@ func (e *Engine) executeCall(
 				if cmd.RecvResp != "" && sip.ResponseStatusMatches(*m, cmd.RecvResp) && !sip.MatchRecv(*m, cmd.RecvReq, cmd.RecvResp, lastSent) {
 					e.emitRecvCSeqReject(callNumber, renderCtx.CallID, cmd, m, lastSent)
 				}
-				e.traceUnexpectedSIP(callNumber, cmd, *m)
-				e.traceCountUnexpected(cmd.Index)
-				sawUnexpectedSIP = true
+				if !cmd.Optional {
+					// For optional recvs, a mismatched message is just being
+					// deferred to a later recv — not truly unexpected.
+					e.traceUnexpectedSIP(callNumber, cmd, *m)
+					e.traceCountUnexpected(cmd.Index)
+					sawUnexpectedSIP = true
+				}
 				if unexpMainIndex >= 0 && unexpectedForMain == nil {
 					cpy := m.Copy()
 					unexpectedForMain = &cpy
